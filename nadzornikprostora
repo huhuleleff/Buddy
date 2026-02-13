@@ -1,0 +1,667 @@
+#ifndef NADZORNIKPROSTORA_H
+#define NADZORNIKPROSTORA_H
+
+const char nadzornikprostora_html[] PROGMEM = R"rawliteral(
+  <!DOCTYPE html>
+<html>
+<head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>Upravitelj Datotek</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background: #1e1e1e;
+    color: #ffffff;
+  }
+  .header {
+    background: #2c2c2c;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+  .header h1 {
+    margin: 0;
+    font-size: 24px;
+  }
+  .header p {
+    margin: 5px 0 0;
+    font-size: 14px;
+    color: #cccccc;
+  }
+  .controls {
+    background: #2c2c2c;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+  .file-list {
+    background: #252526;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    overflow-x: auto;
+  }
+  .file-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .file-table th, .file-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #3c3c3c;
+  }
+  .file-table th {
+    background: #333333;
+    color: #ffffff;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+  }
+  .file-item {
+    cursor: pointer;
+  }
+  .file-item:hover {
+    background: #3c3c3c;
+  }
+  .file-icon {
+    width: 24px;
+    height: 24px;
+    margin-right: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+  .file-name {
+    flex: 1;
+    font-weight: 400;
+  }
+  .file-size, .file-type {
+    color: #cccccc;
+    font-size: 14px;
+    width: 120px;
+  }
+  .file-actions {
+    display: flex;
+    gap: 8px;
+    width: 250px;
+    justify-content: flex-end;
+  }
+  .btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 14px;
+    transition: background 0.2s;
+  }
+  .btn-primary {
+    background: #0078d4;
+    color: white;
+  }
+  .btn-primary:hover {
+    background: #005a9e;
+  }
+  .btn-secondary {
+    background: #444444;
+    color: white;
+  }
+  .btn-secondary:hover {
+    background: #555555;
+  }
+  .btn-danger {
+    background: #d13438;
+    color: white;
+  }
+  .btn-danger:hover {
+    background: #a00e0e;
+  }
+  .btn-warning {
+    background: #ffb900;
+    color: black;
+  }
+  .btn-warning:hover {
+    background: #cc8c00;
+  }
+  .breadcrumb {
+    margin-bottom: 15px;
+    font-size: 14px;
+    padding: 0 15px;
+  }
+  .breadcrumb a {
+    color: #4dabf7;
+    text-decoration: none;
+  }
+  .breadcrumb a:hover {
+    text-decoration: underline;
+  }
+  #uploadArea {
+    border: 2px dashed #555555;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 15px;
+    cursor: pointer;
+    background: #333333;
+  }
+  #uploadArea:hover {
+    border-color: #0078d4;
+    background: #3c3c3c;
+  }
+  .loading {
+    text-align: center;
+    padding: 20px;
+    color: #cccccc;
+  }
+  select {
+    padding: 6px;
+    border-radius: 4px;
+    background: #333333;
+    color: #ffffff;
+    border: 1px solid #555555;
+  }
+  .storage-stats {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #333333;
+    border-radius: 4px;
+  }
+  .storage-stats p {
+    margin: 5px 0;
+    font-size: 14px;
+  }
+  .progress-bar {
+    background: #444444;
+    border-radius: 4px;
+    height: 10px;
+    overflow: hidden;
+    margin-top: 5px;
+  }
+  .progress-bar-fill {
+    background: #0078d4;
+    height: 100%;
+    transition: width 0.3s;
+  }
+</style>
+</head>
+<body>
+
+<div class='header'>
+  <h1>Nadzornik Datotek</h1>
+  <p>Brskajte in upravljajte datoteke</p>
+</div>
+
+<div class='controls'>
+  <div style='margin-bottom: 10px;'>
+    <label for='storageSelect'>Shramba: </label>
+    <select id='storageSelect' onchange='changeStorage(this.value)'>
+      <option value='fatfs' selected>Onboard FATFS</option>
+      <option value='sd'>SD Kartica</option>
+    </select>
+  </div>
+  <div class='storage-stats' id='storageStats'>
+    <p>SD Kartica: <span id='sdStats'>Nalaganje...</span></p>
+    <div class='progress-bar'><div id='sdProgress' class='progress-bar-fill' style='width: 0%'></div></div>
+    <p>Onboard FATFS: <span id='fatfsStats'>Nalaganje...</span></p>
+    <div class='progress-bar'><div id='fatfsProgress' class='progress-bar-fill' style='width: 0%'></div></div>
+  </div>
+  <div id='uploadArea' onclick='document.getElementById("fileInput").click()'>
+    <p>Kliknite tukaj za nalaganje datotek v <span id='uploadPath'>/</span></p>
+    <input type='file' id='fileInput' style='display:none' multiple>
+  </div>
+  <div id='uploadProgress' style='display:none; margin: 10px 0;'>
+    <p><span id='uploadFileName'></span> - <span id='uploadPercent'>0</span>%</p>
+    <div class='progress-bar'>
+      <div id='uploadProgressBar' class='progress-bar-fill' style='width: 0%'></div>
+    </div>
+    <p id='uploadStatus'></p>
+  </div>
+  <div class='input-group'>
+    <button onclick='refreshFiles()' class='btn btn-primary'>Osveži</button>
+    <button onclick='goBack()' class='btn btn-secondary'>Nazaj</button>
+    <button onclick='goHome()' class='btn btn-secondary'>Korenska mapa</button>
+    <button onclick='promptCreateFolder()' class='btn btn-primary'>Ustvari mapo</button>
+    <button onclick='document.getElementById("backgroundInput").click()' class='btn btn-primary'>Nastavi ozadje</button>
+    <input type='file' id='backgroundInput' style='display:none' accept='image/jpeg'>
+  </div>
+</div>
+
+<div class='file-list'>
+  <div class='breadcrumb' id='breadcrumb'></div>
+  <table class='file-table'>
+    <thead>
+      <tr>
+        <th style='width: 50%'>Ime</th>
+        <th style='width: 15%'>Velikost</th>
+        <th style='width: 15%'>Tip</th>
+        <th style='width: 20%'>Dejanja</th>
+      </tr>
+    </thead>
+    <tbody id='fileList'></tbody>
+  </table>
+</div>
+
+<script>
+let currentPath = '/';
+let currentStorage = 'fatfs';  
+const DISPLAY_WIDTH = 320;
+const DISPLAY_HEIGHT = 240;
+
+// WebSocket connection for real-time updates
+let ws;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+
+function connectWebSocket() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  
+  ws.onopen = function() {
+    console.log('WebSocket connected');
+    reconnectAttempts = 0;
+  };
+  
+  ws.onmessage = function(event) {
+    try {
+      const data = JSON.parse(event.data);
+      handleWebSocketMessage(data);
+    } catch (e) {
+      console.error('Error parsing WebSocket message:', e);
+    }
+  };
+  
+  ws.onclose = function() {
+    console.log('WebSocket disconnected');
+    if (reconnectAttempts < maxReconnectAttempts) {
+      setTimeout(() => {
+        reconnectAttempts++;
+        connectWebSocket();
+      }, 2000);
+    }
+  };
+  
+  ws.onerror = function(error) {
+    console.error('WebSocket error:', error);
+  };
+}
+
+function handleWebSocketMessage(data) {
+  switch(data.type) {
+    case 'uploadStart':
+      showUploadProgress(data.filename, 0, data.size);
+      updateUploadStatus('Priprava na nalaganje...');
+      break;
+    case 'uploadProgress':
+      updateUploadProgress(data.uploaded, data.total, data.progress);
+      updateUploadStatus(`Nalaganje... ${formatFileSize(data.uploaded)} / ${formatFileSize(data.total)}`);
+      break;
+    case 'uploadComplete':
+      updateUploadProgress(data.size, data.size, 100);
+      updateUploadStatus('Nalaganje končano!');
+      setTimeout(() => {
+        hideUploadProgress();
+        refreshFiles();
+      }, 2000);
+      break;
+    case 'uploadFailed':
+      updateUploadStatus('Napaka: ' + data.error);
+      setTimeout(() => {
+        hideUploadProgress();
+        refreshFiles();
+      }, 3000);
+      break;
+  }
+}
+
+function showUploadProgress(filename, uploaded, total) {
+  const progressDiv = document.getElementById('uploadProgress');
+  const fileNameSpan = document.getElementById('uploadFileName');
+  
+  fileNameSpan.textContent = filename;
+  progressDiv.style.display = 'block';
+  updateUploadProgress(uploaded, total, 0);
+}
+
+function updateUploadProgress(uploaded, total, percent) {
+  const progressBar = document.getElementById('uploadProgressBar');
+  const percentSpan = document.getElementById('uploadPercent');
+  
+  progressBar.style.width = `${percent}%`;
+  percentSpan.textContent = percent;
+}
+
+function updateUploadStatus(status) {
+  document.getElementById('uploadStatus').textContent = status;
+}
+
+function hideUploadProgress() {
+  document.getElementById('uploadProgress').style.display = 'none';
+}
+
+// Initialize WebSocket connection
+connectWebSocket();
+
+async function loadFiles(path, storage) {
+  if (!path) path = '/';
+  if (!storage) storage = currentStorage;
+  currentPath = path;
+  currentStorage = storage;
+  updateBreadcrumb();
+  updateUploadPath();
+  document.getElementById('fileList').innerHTML = '';
+  try {
+    await loadStorageStats();
+    const response = await fetch(`/api/list?path=${encodeURIComponent(path)}&storage=${encodeURIComponent(storage)}`);
+    const files = await response.json();
+    displayFiles(files);
+  } catch (e) {
+    document.getElementById('fileList').innerHTML = '<tr><td colspan="4" class="loading">Napaka pri nalaganju datotek</td></tr>';
+    console.error(e);
+  }
+}
+
+async function loadStorageStats() {
+  try {
+    const response = await fetch('/api/storageStats');
+    const stats = await response.json();
+    const formatSize = (bytes) => {
+      if (bytes < 1024) return bytes + ' B';
+      else if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+      else if (bytes < 1024*1024*1024) return (bytes/(1024*1024)).toFixed(1) + ' MB';
+      else return (bytes/(1024*1024*1024)).toFixed(1) + ' GB';
+    };
+    // SD Card Stats
+    const sdPercent = stats.sd.total ? (stats.sd.used / stats.sd.total * 100).toFixed(1) : 0;
+    document.getElementById('sdStats').textContent = 
+      `${formatSize(stats.sd.used)} uporabljeno od ${formatSize(stats.sd.total)} (${sdPercent}%)`;
+    document.getElementById('sdProgress').style.width = `${sdPercent}%`;
+    // FATFS Stats
+    const fatfsPercent = stats.fatfs.total ? (stats.fatfs.used / stats.fatfs.total * 100).toFixed(1) : 0;
+    document.getElementById('fatfsStats').textContent = 
+      `${formatSize(stats.fatfs.used)} uporabljeno od ${formatSize(stats.fatfs.total)} (${fatfsPercent}%)`;
+    document.getElementById('fatfsProgress').style.width = `${fatfsPercent}%`;
+  } catch (e) {
+    document.getElementById('sdStats').textContent = 'Napaka';
+    document.getElementById('fatfsStats').textContent = 'Napaka';
+    console.error('Error loading storage stats:', e);
+  }
+}
+
+function displayFiles(files) {
+  const fileList = document.getElementById('fileList');
+  if (files.length === 0) {
+    fileList.innerHTML = '<tr><td colspan="4" class="loading">Ni najdenih datotek</td></tr>';
+    return;
+  }
+  let html = '';
+  if (currentPath !== '/') {
+    const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
+    html += `<tr class="file-item" onclick="loadFiles('${parentPath}', '${currentStorage}')">
+      <td><div class="file-icon">📁</div><span class="file-name">.. (Nadrejena mapa)</span></td>
+      <td></td>
+      <td>Mapa</td>
+      <td></td>
+    </tr>`;
+  }
+  files.forEach(file => {
+    const isDir = file.type === 'directory';
+    const icon = isDir ? '📁' : getFileIcon(file.name);
+    const size = isDir ? '' : formatFileSize(file.size);
+    const type = isDir ? 'Mapa' : getFileType(file.name);
+    const action = isDir ? `loadFiles('${file.path}', '${currentStorage}')` : `window.open('/view?file=${encodeURIComponent(file.path)}&storage=${encodeURIComponent(currentStorage)}', '_blank')`;
+    html += `<tr class="file-item" onclick="event.stopPropagation(); ${action}">
+      <td><div class="file-icon">${icon}</div><span class="file-name">${file.name}</span></td>
+      <td class="file-size">${size}</td>
+      <td class="file-type">${type}</td>
+      <td class="file-actions" onclick="event.stopPropagation();">
+        ${isDir ? '' : `<a href="/download?file=${encodeURIComponent(file.path)}&storage=${encodeURIComponent(currentStorage)}" class="btn btn-primary" download>Prenesi</a>`}
+        <button class="btn btn-danger" onclick="deleteItem('${file.path}', ${isDir})">Izbriši</button>
+        <button class="btn btn-warning" onclick="promptRename('${file.path}', '${file.name}')">Preimenuj</button>
+      </td>
+    </tr>`;
+  });
+  fileList.innerHTML = html;
+}
+
+function updateBreadcrumb() {
+  const breadcrumb = document.getElementById('breadcrumb');
+  const parts = currentPath.split('/').filter(p => p);
+  let html = `<a href="#" onclick="loadFiles('/', '${currentStorage}')">Korenska mapa</a>`;
+  let pathBuild = '';
+  parts.forEach(part => {
+    pathBuild += '/' + part;
+    html += ` / <a href="#" onclick="loadFiles('${pathBuild}', '${currentStorage}')">${part}</a>`;
+  });
+  breadcrumb.innerHTML = html;
+}
+
+function updateUploadPath() {
+  document.getElementById('uploadPath').textContent = currentPath;
+}
+
+function getFileIcon(filename) {
+  const ext = filename.toLowerCase().split('.').pop();
+  const icons = {
+    'txt': '📄', 'pdf': '📕', 'doc': '📘', 'docx': '📘',
+    'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️', 'bmp': '🖼️',
+    'mp3': '🎵', 'wav': '🎵', 'ogg': '🎵',
+    'mp4': '🎞️', 'avi': '🎞️', 'mov': '🎞️',
+    'zip': '🗜️', 'rar': '🗜️', '7z': '🗜️',
+  };
+  return icons[ext] || '📄';
+}
+
+function getFileType(filename) {
+  const ext = filename.toLowerCase().split('.').pop();
+  const types = {
+    'txt': 'Besedilna datoteka',
+    'pdf': 'PDF dokument',
+    'doc': 'Word dokument',
+    'docx': 'Word dokument',
+    'jpg': 'Slika JPEG',
+    'jpeg': 'Slika JPEG',
+    'png': 'Slika PNG',
+    'gif': 'Slika GIF',
+    'bmp': 'Slika BMP',
+    'mp3': 'Zvočna datoteka',
+    'wav': 'Zvočna datoteka',
+    'ogg': 'Zvočna datoteka',
+    'mp4': 'Video datoteka',
+    'avi': 'Video datoteka',
+    'mov': 'Video datoteka',
+    'zip': 'Stisnjena datoteka',
+    'rar': 'Stisnjena datoteka',
+    '7z': 'Stisnjena datoteka',
+  };
+  return types[ext] || 'Datoteka';
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  else if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  else return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+async function promptCreateFolder() {
+  const folderName = prompt('Vnesite ime nove mape:');
+  if (!folderName || folderName.trim() === '') {
+    alert('Ime mape je obvezno');
+    return;
+  }
+  const folderPath = currentPath === '/' ? `/${folderName.trim()}` : `${currentPath}/${folderName.trim()}`;
+  try {
+    const response = await fetch('/api/createFolder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `path=${encodeURIComponent(folderPath)}&storage=${encodeURIComponent(currentStorage)}`
+    });
+    if (response.ok) {
+      refreshFiles();
+    } else {
+      alert('Napaka pri ustvarjanju mape: ' + await response.text());
+    }
+  } catch (err) {
+    alert('Napaka pri ustvarjanju mape: ' + err.message);
+  }
+}
+
+async function deleteItem(path, isDir) {
+  const itemType = isDir ? 'mapo' : 'datoteko';
+  const confirmMsg = `Ste prepričani, da želite izbrisati ${itemType} ${path}?\\n\\nUporabljam močno brisanje (Force Delete) za vse datoteke.`;
+  
+  if (!confirm(confirmMsg)) return;
+  
+  try {
+    const response = await fetch('/api/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `path=${encodeURIComponent(path)}&storage=${encodeURIComponent(currentStorage)}`
+    });
+    
+    if (response.ok) {
+      const result = await response.text();
+      console.log('Delete result:', result);
+      refreshFiles();
+    } else {
+      const errorMsg = await response.text();
+      alert('Napaka pri brisanju: ' + errorMsg);
+    }
+  } catch (err) {
+    alert('Napaka pri brisanju: ' + err.message);
+  }
+}
+
+async function promptRename(oldPath, oldName) {
+  const newName = prompt('Vnesite novo ime:', oldName);
+  if (!newName || newName === oldName) return;
+  const newPath = oldPath.substring(0, oldPath.lastIndexOf('/') + 1) + newName;
+  try {
+    const response = await fetch('/api/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `oldPath=${encodeURIComponent(oldPath)}&newPath=${encodeURIComponent(newPath)}&storage=${encodeURIComponent(currentStorage)}`
+    });
+    if (response.ok) {
+      refreshFiles();
+    } else {
+      alert('Napaka pri preimenovanju: ' + await response.text());
+    }
+  } catch (err) {
+    alert('Napaka pri preimenovanju: ' + err.message);
+  }
+}
+
+function refreshFiles() {
+  loadFiles(currentPath, currentStorage);
+}
+
+function goHome() {
+  loadFiles('/', currentStorage);
+}
+
+function goBack() {
+  if (currentPath === '/') return;
+  const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
+  loadFiles(parentPath, currentStorage);
+}
+
+function changeStorage(storage) {
+  currentStorage = storage;
+  loadFiles('/', currentStorage);
+  document.getElementById('storageSelect').value = storage;
+}
+
+document.getElementById('fileInput').addEventListener('change', async (event) => {
+  const files = event.target.files;
+  if (!files.length) return;
+  document.getElementById('fileList').innerHTML = '<tr><td colspan="4" class="loading">Nalaganje datotek...</td></tr>';
+  for (let file of files) {
+    await uploadFile(file);
+  }
+  event.target.value = '';
+  refreshFiles();
+});
+
+async function uploadFile(file) {
+  const url = `/upload?path=${encodeURIComponent(currentPath)}&storage=${encodeURIComponent(currentStorage)}`;
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  try {
+    const response = await fetch(url, { method: 'POST', body: formData });
+    if (!response.ok) throw new Error('Napaka pri nalaganju: ' + await response.text());
+  } catch (err) {
+    alert('Napaka pri nalaganju: ' + err.message);
+  }
+}
+
+document.getElementById('backgroundInput').addEventListener('change', async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.match('image/jpeg')) {
+    alert('Prosimo, izberite datoteko formata JPG.');
+    event.target.value = '';
+    return;
+  }
+  document.getElementById('fileList').innerHTML = '<tr><td colspan="4" class="loading">Nastavljanje ozadja...</td></tr>';
+  try {
+    const resizedFile = await resizeImage(file, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    await uploadBackground(resizedFile);
+    event.target.value = '';
+    refreshFiles();
+  } catch (err) {
+    alert('Napaka pri nastavljanju ozadja: ' + err.message);
+    event.target.value = '';
+    refreshFiles();
+  }
+});
+
+async function resizeImage(file, targetWidth, targetHeight) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      console.log(`Original image dimensions: ${img.width}x${img.height}`);
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      console.log(`Canvas dimensions set to: ${canvas.width}x${canvas.height}`);
+      canvas.toBlob(blob => {
+        if (blob) {
+          console.log(`Resized image blob size: ${blob.size} bytes`);
+          resolve(new File([blob], 'skyozadje.jpg', { type: 'image/jpeg' }));
+        } else {
+          reject(new Error('Napaka pri ustvarjanju slike'));
+        }
+      }, 'image/jpeg', 0.9);
+    };
+    img.onerror = () => reject(new Error('Napaka pri nalagu slike'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function uploadBackground(file) {
+  const url = `/api/setBackground?storage=${encodeURIComponent(currentStorage)}`;
+  const formData = new FormData();
+  formData.append('file', file, 'skyozadje.jpg');
+  try {
+    const response = await fetch(url, { method: 'POST', body: formData });
+    if (!response.ok) throw new Error('Napaka pri nalaganju ozadja: ' + await response.text());
+  } catch (err) {
+    throw err;
+  }
+}
+
+loadFiles('/', 'fatfs');
+</script>
+</body>
+</html>
+   )rawliteral";
+
+#endif // NADZORNIKPROSTORA_H
