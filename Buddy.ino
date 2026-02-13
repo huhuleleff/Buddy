@@ -119,6 +119,7 @@ void printHeapUsage(const char* location) {
 #include <AsyncTCP.h>
 #include "nadzornikprostora.h"
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <NTPClient.h>
 #include <Update.h>
 #include <WiFiUdp.h>
@@ -302,6 +303,7 @@ uint8_t calculateDataChecksum(uint8_t data_high, uint8_t data_low);
 bool saveStringToSPIFFS(const char* path, const String& value);
 bool loadStringFromSPIFFS(const char* path, String& value);
 int dayOfWeek();
+bool downloadFirmware(String url, const String& filename);
 bool ticktajmer;
 
 // Pointer safety validation functions
@@ -340,6 +342,136 @@ void sendDiscordMessage(String message) {
     Serial.printf("Error sending Discord message, response code: %d\n", httpResponseCode);
   }
   http.end();
+}
+
+bool downloadFirmware(String url, const String& filename) {
+  if (filename.length() == 0) {
+    Serial.println("[OTA] Invalid filename");
+    return false;
+  }
+
+  String downloadUrl = url;
+  const uint8_t maxRedirects = 5;
+
+  for (uint8_t redirectCount = 0; redirectCount <= maxRedirects; ++redirectCount) {
+    HTTPClient http;
+    WiFiClient plainClient;
+    WiFiClientSecure secureClient;
+
+    if (downloadUrl.startsWith("https://")) {
+      secureClient.setInsecure();
+      if (!http.begin(secureClient, downloadUrl)) {
+        Serial.println("[OTA] Failed to begin HTTPS request");
+        return false;
+      }
+    } else {
+      if (!http.begin(plainClient, downloadUrl)) {
+        Serial.println("[OTA] Failed to begin HTTP request");
+        return false;
+      }
+    }
+
+    int responseCode = http.GET();
+    if (responseCode <= 0) {
+      Serial.printf("[OTA] HTTP GET failed, error: %s\n", http.errorToString(responseCode).c_str());
+      http.end();
+      return false;
+    }
+
+    if (responseCode == HTTP_CODE_MOVED_PERMANENTLY || responseCode == HTTP_CODE_FOUND ||
+        responseCode == HTTP_CODE_SEE_OTHER || responseCode == HTTP_CODE_TEMPORARY_REDIRECT ||
+        responseCode == HTTP_CODE_PERMANENT_REDIRECT) {
+      String location = http.getLocation();
+      http.end();
+
+      if (location.length() == 0) {
+        Serial.println("[OTA] Redirect without Location header");
+        return false;
+      }
+
+      Serial.println("[OTA] Redirected to: " + location);
+      downloadUrl = location;
+      continue;
+    }
+
+    if (responseCode != HTTP_CODE_OK) {
+      Serial.printf("[OTA] Unexpected HTTP response: %d\n", responseCode);
+      http.end();
+      return false;
+    }
+
+    String path = "/" + filename;
+    FFat.remove(path);
+    File file = FFat.open(path, FILE_WRITE);
+    if (!file) {
+      Serial.println("[OTA] Failed to open firmware file for writing");
+      http.end();
+      return false;
+    }
+
+    WiFiClient *stream = http.getStreamPtr();
+    uint8_t buffer[1024];
+    int remaining = http.getSize();
+    size_t totalWritten = 0;
+
+    while (http.connected() && (remaining > 0 || remaining == -1)) {
+      esp_task_wdt_reset();
+      yield();
+
+      size_t availableBytes = stream->available();
+      if (availableBytes == 0) {
+        delay(1);
+        continue;
+      }
+
+      size_t chunk = availableBytes;
+      if (chunk > sizeof(buffer)) {
+        chunk = sizeof(buffer);
+      }
+
+      int bytesRead = stream->read(buffer, chunk);
+      if (bytesRead < 0) {
+        Serial.println("[OTA] Stream read error");
+        file.close();
+        FFat.remove(path);
+        http.end();
+        return false;
+      }
+
+      if (bytesRead == 0) {
+        continue;
+      }
+
+      size_t written = file.write(buffer, bytesRead);
+      if (written != static_cast<size_t>(bytesRead)) {
+        Serial.println("[OTA] File write failed");
+        file.close();
+        FFat.remove(path);
+        http.end();
+        return false;
+      }
+
+      totalWritten += written;
+      if (remaining > 0) {
+        remaining -= bytesRead;
+      }
+    }
+
+    file.close();
+    http.end();
+
+    if (totalWritten == 0) {
+      Serial.println("[OTA] Downloaded file is empty");
+      FFat.remove(path);
+      return false;
+    }
+
+    Serial.printf("[OTA] Firmware downloaded: %u bytes\n", static_cast<unsigned>(totalWritten));
+    return true;
+  }
+
+  Serial.println("[OTA] Too many redirects");
+  return false;
 }
 
 const unsigned char numDataPoints = 24;
@@ -8303,4 +8435,3 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
       file = root.openNextFile();
    }
 }
-
