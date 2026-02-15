@@ -3465,13 +3465,13 @@ int dayOfWeek() {
 }
 
 struct UrnikGridStyle {
-  uint8_t rowStartY;
-  uint8_t rowEndY;
+  int16_t rowStartY;
+  int16_t rowEndY;
   uint8_t rowStep;
-  uint8_t dayLabelX;
-  uint8_t dayMarkerX;
-  uint8_t colStartX;
-  uint8_t colEndX;
+  int16_t dayLabelX;
+  int16_t dayMarkerX;
+  int16_t colStartX;
+  int16_t colEndX;
   uint8_t colStep;
   uint8_t cellW;
   uint8_t cellH;
@@ -3481,10 +3481,16 @@ struct UrnikGridStyle {
 
 // URNIK GRID SIZE TUNING (automatic follow):
 // Change only inner size values below; all dependent sizes/steps/ranges are derived.
-const uint8_t URNIK_DAY_MARKER_X = 4;
-const uint8_t URNIK_DAY_LABEL_X = 10;
-const uint8_t URNIK_COL_START_X = 30;
-const uint8_t URNIK_TOP_START_Y = 0;
+const int16_t URNIK_DAY_MARKER_X = 4;
+const int16_t URNIK_DAY_LABEL_X = 10;
+const int16_t URNIK_COL_START_X = 30;
+const int16_t URNIK_TOP_START_Y = 0;
+
+// Position offsets for moving each graph independently (left/right/up/down).
+const int16_t URNIK_TOP_OFFSET_X = 0;
+const int16_t URNIK_TOP_OFFSET_Y = 0;
+const int16_t URNIK_BOTTOM_OFFSET_X = 0;
+const int16_t URNIK_BOTTOM_OFFSET_Y = 0;
 
 const uint8_t URNIK_CELL_INNER_W = 4;
 const uint8_t URNIK_CELL_INNER_H = 7;
@@ -3497,15 +3503,15 @@ const uint8_t URNIK_CELL_W = URNIK_CELL_INNER_W + (2 * URNIK_CELL_BORDER);
 const uint8_t URNIK_CELL_H = URNIK_CELL_INNER_H + (2 * URNIK_CELL_BORDER);
 const uint8_t URNIK_COL_STEP = URNIK_CELL_W - URNIK_CELL_OVERLAP_X;
 const uint8_t URNIK_ROW_STEP = URNIK_CELL_H - URNIK_CELL_OVERLAP_Y;
-const uint8_t URNIK_TOP_END_Y = URNIK_TOP_START_Y + (URNIK_ROW_STEP * 6);
-const uint8_t URNIK_BOTTOM_START_Y = URNIK_TOP_END_Y + URNIK_HALF_GAP_Y;
-const uint8_t URNIK_BOTTOM_END_Y = URNIK_BOTTOM_START_Y + (URNIK_ROW_STEP * 6);
+const int16_t URNIK_TOP_END_Y = URNIK_TOP_START_Y + (URNIK_ROW_STEP * 6);
+const int16_t URNIK_BOTTOM_START_Y = URNIK_TOP_END_Y + URNIK_HALF_GAP_Y;
+const int16_t URNIK_BOTTOM_END_Y = URNIK_BOTTOM_START_Y + (URNIK_ROW_STEP * 6);
 
-void drawUrnikCell(uint8_t x, uint8_t y, uint8_t value, bool selected, const UrnikGridStyle& style) {
+void drawUrnikCell(int16_t x, int16_t y, uint8_t value, bool selected, const UrnikGridStyle& style) {
   const uint8_t fillLevel = map(value, 0, 100, 0, style.cellInnerH - 1);
-  const uint8_t innerStartX = x + 1;
-  const uint8_t innerEndX = x + style.cellInnerW;
-  const uint8_t innerBottomY = y + style.cellInnerH;
+  const int16_t innerStartX = x + 1;
+  const int16_t innerEndX = x + style.cellInnerW;
+  const int16_t innerBottomY = y + style.cellInnerH;
 
   tft.drawRect(x, y, style.cellW, style.cellH, TFT_RED);
 
@@ -3537,7 +3543,7 @@ void drawUrnikHalf(uint8_t dayIndexStart,
                    const UrnikGridStyle& style) {
   uint8_t localDayIndex = dayIndexStart;
 
-  for (uint8_t rowY = style.rowStartY; rowY <= style.rowEndY; rowY += style.rowStep) {
+  for (int16_t rowY = style.rowStartY; rowY <= style.rowEndY; rowY += style.rowStep) {
     if (localDayIndex == urnikizbranakockaY) {
       tft.setTextColor(TFT_RED, TFT_BLUE);
       tft.setCursor(style.dayMarkerX, rowY);
@@ -3551,7 +3557,7 @@ void drawUrnikHalf(uint8_t dayIndexStart,
     tft.drawString(dan[localDayIndex - dayLabelOffset], style.dayLabelX, rowY, 1);
 
     uint8_t localSlot = slotStart;
-    for (uint8_t colX = style.colStartX; colX <= style.colEndX; colX += style.colStep) {
+    for (int16_t colX = style.colStartX; colX <= style.colEndX; colX += style.colStep) {
       const uint8_t value = casovnirazpored[localDayIndex - dayLabelOffset][localSlot];
       const bool selected = (localSlot == urnikizbranakockaX && localDayIndex == urnikizbranakockaY);
       drawUrnikCell(colX, rowY, value, selected, style);
@@ -3645,15 +3651,16 @@ urnikizrisan = 0;
       if (urnikizbranakockaY > 6) {tft.print(casovnirazpored[urnikizbranakockaY - 7][urnikizbranakockaX]);} else{tft.print(casovnirazpored[urnikizbranakockaY][urnikizbranakockaX]);}
  tft.print("%) ");
 
-    const uint8_t urnikColEndX = URNIK_COL_START_X + (URNIK_COL_STEP * 23);
-    const UrnikGridStyle gridStyle = {
-      URNIK_TOP_START_Y,
-      URNIK_TOP_END_Y,
+    const int16_t topColStartX = URNIK_COL_START_X + URNIK_TOP_OFFSET_X;
+    const int16_t topColEndX = topColStartX + (URNIK_COL_STEP * 23);
+    const UrnikGridStyle topHalfStyle = {
+      URNIK_TOP_START_Y + URNIK_TOP_OFFSET_Y,
+      URNIK_TOP_END_Y + URNIK_TOP_OFFSET_Y,
       URNIK_ROW_STEP,
-      URNIK_DAY_LABEL_X,
-      URNIK_DAY_MARKER_X,
-      URNIK_COL_START_X,
-      urnikColEndX,
+      URNIK_DAY_LABEL_X + URNIK_TOP_OFFSET_X,
+      URNIK_DAY_MARKER_X + URNIK_TOP_OFFSET_X,
+      topColStartX,
+      topColEndX,
       URNIK_COL_STEP,
       URNIK_CELL_W,
       URNIK_CELL_H,
@@ -3661,11 +3668,24 @@ urnikizrisan = 0;
       URNIK_CELL_INNER_H
     };
 
-    drawUrnikHalf(0, 0, 0, 23, gridStyle);
+    drawUrnikHalf(0, 0, 0, 23, topHalfStyle);
 
-    UrnikGridStyle lowerHalfStyle = gridStyle;
-    lowerHalfStyle.rowStartY = URNIK_BOTTOM_START_Y;
-    lowerHalfStyle.rowEndY = URNIK_BOTTOM_END_Y;
+    const int16_t bottomColStartX = URNIK_COL_START_X + URNIK_BOTTOM_OFFSET_X;
+    const int16_t bottomColEndX = bottomColStartX + (URNIK_COL_STEP * 23);
+    const UrnikGridStyle lowerHalfStyle = {
+      URNIK_BOTTOM_START_Y + URNIK_BOTTOM_OFFSET_Y,
+      URNIK_BOTTOM_END_Y + URNIK_BOTTOM_OFFSET_Y,
+      URNIK_ROW_STEP,
+      URNIK_DAY_LABEL_X + URNIK_BOTTOM_OFFSET_X,
+      URNIK_DAY_MARKER_X + URNIK_BOTTOM_OFFSET_X,
+      bottomColStartX,
+      bottomColEndX,
+      URNIK_COL_STEP,
+      URNIK_CELL_W,
+      URNIK_CELL_H,
+      URNIK_CELL_INNER_W,
+      URNIK_CELL_INNER_H
+    };
     drawUrnikHalf(7, 7, 24, 47, lowerHalfStyle);
   }
 }
