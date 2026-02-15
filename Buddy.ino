@@ -4665,10 +4665,10 @@ void drawPowerGraphBackground() {
 
   for (int tempC = 0; tempC <= 40; tempC += 4) {
     int x = map(tempC, 0, 40, graphX, graphX + graphW);
-    tft.setCursor(x - (tempC >= 10 ? 6 : 3), graphY + graphH + 4);
+    tft.setCursor(x - (tempC >= 10 ? 6 : 3), graphY + graphH + 9);
     tft.print(tempC);
   }
-  tft.setCursor(graphX + graphW - 4, graphY + graphH + 14);
+  tft.setCursor(graphX + graphW - 4, graphY + graphH + 19);
   tft.print("C");
 
   for (int power = 0; power <= 100; power += 10) {
@@ -4708,6 +4708,66 @@ void drawPowerGraphThickLine(int x1, int y1, int x2, int y2, uint16_t color) {
   tft.drawLine(x1, y1 + 1, x2, y2 + 1, color);
 }
 
+int getPowerGraphPointY(int row, int pointIndex, int graphY, int graphBottom) {
+  int y = map(linijamoci[row][pointIndex], 0, 100, graphBottom, graphY);
+  return constrain(y, graphY, graphBottom);
+}
+
+void drawPowerGraphSmoothCurveRange(int row, int startSegment, int endSegment, int graphX, int graphRight, int graphY, int graphBottom, uint16_t color) {
+  startSegment = max(0, startSegment);
+  endSegment = min(8, endSegment);
+  if (startSegment > endSegment) {
+    return;
+  }
+
+  const int samplesPerSegment = 6;
+
+  for (int seg = startSegment; seg <= endSegment; seg++) {
+    int p0 = max(0, seg - 1);
+    int p1 = seg;
+    int p2 = seg + 1;
+    int p3 = min(9, seg + 2);
+
+    int x0 = map(p0, 0, 9, graphX, graphRight);
+    int x1 = map(p1, 0, 9, graphX, graphRight);
+    int x2 = map(p2, 0, 9, graphX, graphRight);
+    int x3 = map(p3, 0, 9, graphX, graphRight);
+
+    int y0 = getPowerGraphPointY(row, p0, graphY, graphBottom);
+    int y1 = getPowerGraphPointY(row, p1, graphY, graphBottom);
+    int y2 = getPowerGraphPointY(row, p2, graphY, graphBottom);
+    int y3 = getPowerGraphPointY(row, p3, graphY, graphBottom);
+
+    float prevX = (float)x1;
+    float prevY = (float)y1;
+
+    for (int step = 1; step <= samplesPerSegment; step++) {
+      float t = (float)step / (float)samplesPerSegment;
+      float tt = t * t;
+      float ttt = tt * t;
+
+      float currX = 0.5f * ((2.0f * x1)
+        + (-x0 + x2) * t
+        + (2.0f * x0 - 5.0f * x1 + 4.0f * x2 - x3) * tt
+        + (-x0 + 3.0f * x1 - 3.0f * x2 + x3) * ttt);
+
+      float currY = 0.5f * ((2.0f * y1)
+        + (-y0 + y2) * t
+        + (2.0f * y0 - 5.0f * y1 + 4.0f * y2 - y3) * tt
+        + (-y0 + 3.0f * y1 - 3.0f * y2 + y3) * ttt);
+
+      int drawX1 = constrain((int)roundf(prevX), graphX, graphRight);
+      int drawY1 = constrain((int)roundf(prevY), graphY, graphBottom);
+      int drawX2 = constrain((int)roundf(currX), graphX, graphRight);
+      int drawY2 = constrain((int)roundf(currY), graphY, graphBottom);
+
+      drawPowerGraphThickLine(drawX1, drawY1, drawX2, drawY2, color);
+      prevX = currX;
+      prevY = currY;
+    }
+  }
+}
+
 void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int selectedIndex) {
   const int graphX = 36;
   const int graphY = 16;
@@ -4736,11 +4796,13 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
     maxY = max(maxY, py);
   }
 
-  const int redrawMargin = 10;
-  int regionX = max(0, minX - redrawMargin);
-  int regionY = max(0, minY - redrawMargin);
-  int regionRight = min(DISPLAY_WIDTH - 1, maxX + redrawMargin);
-  int regionBottom = min(graphBottom, maxY + redrawMargin);
+  const int redrawMarginX = 10;
+  const int redrawMarginTop = 8;
+  const int redrawMarginBottom = 8;
+  int regionX = max(0, minX - redrawMarginX);
+  int regionY = max(0, minY - redrawMarginTop);
+  int regionRight = min(DISPLAY_WIDTH - 1, maxX + redrawMarginX);
+  int regionBottom = min(graphBottom + 6, maxY + redrawMarginBottom);
 
   for (int x = regionX; x <= regionRight; x++) {
     tft.drawFastVLine(x, regionY, regionBottom - regionY + 1, getPowerGraphGradientColor(x));
@@ -4794,23 +4856,11 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
 
   int firstSegment = max(0, startPoint - 1);
   int lastSegment = min(8, endPoint);
-  for (int i = firstSegment; i <= lastSegment; i++) {
-    int x1 = map(i, 0, 9, graphX, graphRight);
-    int y1 = map(linijamoci[row][i], 0, 100, graphBottom, graphY);
-    int x2 = map(i + 1, 0, 9, graphX, graphRight);
-    int y2 = map(linijamoci[row][i + 1], 0, 100, graphBottom, graphY);
-
-    x1 = constrain(x1, graphX, graphRight);
-    x2 = constrain(x2, graphX, graphRight);
-    y1 = constrain(y1, graphY, graphBottom);
-    y2 = constrain(y2, graphY, graphBottom);
-
-    drawPowerGraphThickLine(x1, y1, x2, y2, TFT_RED);
-  }
+  drawPowerGraphSmoothCurveRange(row, firstSegment, lastSegment, graphX, graphRight, graphY, graphBottom, TFT_RED);
 
   if (selectedIndex >= 0 && selectedIndex <= 9) {
     int selectedX = map(selectedIndex, 0, 9, graphX, graphRight);
-    int selectedY = map(linijamoci[row][selectedIndex], 0, 100, graphBottom, graphY);
+    int selectedY = getPowerGraphPointY(row, selectedIndex, graphY, graphBottom);
     selectedX = constrain(selectedX, graphX, graphRight);
     selectedY = constrain(selectedY, graphY, graphBottom);
     if (selectedX >= regionX - 6 && selectedX <= regionRight + 6 && selectedY >= regionY - 6 && selectedY <= regionBottom + 6) {
@@ -4828,7 +4878,6 @@ void grafmoci() {
     const int graphH = DISPLAY_HEIGHT - 44;
     const int graphRight = graphX + graphW;
     const int graphBottom = graphY + graphH;
-    int x, y, x2, y2;
     if (!powerGraphStaticDrawn) {
       drawPowerGraphBackground();
       powerGraphStaticDrawn = 1;
@@ -4849,21 +4898,13 @@ void grafmoci() {
     }
 
 
-    for (int i = 0; i < 9; i++) {
-      x = map(i, 0, 9, graphX, graphRight);
-      y = map(linijamoci[indup2 + pristej][i], 0, 100, graphBottom, graphY);  //0-100 procentov
-      x2 = map(i + 1, 0, 9, graphX, graphRight);
-      y2 = map(linijamoci[indup2 + pristej][i + 1], 0, 100, graphBottom, graphY);  //0-100 procentov
+    drawPowerGraphSmoothCurveRange(indup2 + pristej, 0, 8, graphX, graphRight, graphY, graphBottom, TFT_RED);
 
-      x = constrain(x, graphX, graphRight);
-      x2 = constrain(x2, graphX, graphRight);
-      y = constrain(y, graphY, graphBottom);
-      y2 = constrain(y2, graphY, graphBottom);
-
-      drawPowerGraphThickLine(x, y, x2, y2, TFT_RED);
-      if (izbirnik == i) { drawLargeCircle(x, y, TFT_YELLOW, 5); }
-      if (i == 8 && izbirnik == 9) { drawLargeCircle(x2, y2, TFT_YELLOW, 5); }
-    }
+    int selectedX = map(izbirnik, 0, 9, graphX, graphRight);
+    int selectedY = getPowerGraphPointY(indup2 + pristej, izbirnik, graphY, graphBottom);
+    selectedX = constrain(selectedX, graphX, graphRight);
+    selectedY = constrain(selectedY, graphY, graphBottom);
+    drawLargeCircle(selectedX, selectedY, TFT_YELLOW, 5);
   }
 }
 
