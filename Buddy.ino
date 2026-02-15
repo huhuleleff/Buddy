@@ -2804,9 +2804,15 @@ void loop() {
   
   // OTA update trigger - when user provides URL via browser
   if (otaTriggered && defaultFirmwareUrl.length() > 0) {
+    // Reset trigger BEFORE running OTA to avoid retry loop on failed update/no-update
+    otaTriggered = false;
     Serial.println("triggering OTA update...");
     Serial.println("Firmware URL: " + defaultFirmwareUrl);
     doOTA();
+  } else if (otaTriggered && defaultFirmwareUrl.length() == 0) {
+    // Defensive reset for invalid empty URL state
+    otaTriggered = false;
+    Serial.println("[OTA] Trigger ignored because firmware URL is empty");
   }
   
   // Delayed OTA update trigger - from automatic update check
