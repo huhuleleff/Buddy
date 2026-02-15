@@ -78,6 +78,8 @@ String getVPDStatus(float vpd) {
 
 // Function prototype for OTA update
 void doOTA();
+void doLocalOTAFromFile(const String& fullPath);
+bool restartWebServer(const char* reason);
 
 // Function prototype for automatic update checking
 bool checkForUpdates(String& firmwareUrl);
@@ -239,6 +241,8 @@ const unsigned long OTA_DELAY = 15000; // 15 seconds delay
 bool otaPendingFromWeb = false;
 unsigned long otaWebRequestTime = 0;
 const unsigned long OTA_WEB_DELAY = 10000; // 10 seconds delay for web-triggered updates
+bool otaPendingFromLocalFile = false;
+String otaLocalFilePath = "";
 
 // Flag to track if update check has been performed after WiFi connection
 bool updateCheckDone = false;
@@ -2395,6 +2399,9 @@ linijamoci[5] = { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 };
 
   // OTA Update from local file endpoint
   server.on("/ota/update", HTTP_POST, [](AsyncWebServerRequest *request) {
+
+    if (!request->hasParam("filename", true)) {
+
     if (request->hasParam("filename", true)) {
       String filename = request->getParam("filename", true)->value();
       
@@ -2483,8 +2490,32 @@ linijamoci[5] = { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 };
         request->send(404, "text/plain", "File not found");
       }
     } else {
+
       request->send(400, "text/plain", "Missing filename");
+      return;
     }
+
+    String filename = request->getParam("filename", true)->value();
+    filename.trim();
+    Serial.println("[OTA] Requested local update file: " + filename);
+
+    if (!filename.endsWith(".bin")) {
+      request->send(400, "text/plain", "Invalid file type");
+      return;
+    }
+
+    String fullPath = "/" + filename;
+    if (!FFat.exists(fullPath)) {
+      Serial.println("[OTA] Firmware file not found: " + fullPath);
+      request->send(404, "text/plain", "File not found");
+      return;
+    }
+
+    // Schedule OTA from loop() to avoid blocking async_tcp task and triggering WDT
+    otaLocalFilePath = fullPath;
+    otaPendingFromLocalFile = true;
+    webSocket.textAll("{\"ota_status\":\"pending_local\"}");
+    request->send(202, "text/plain", "Local OTA scheduled");
   });
 
   // Get default firmware URL endpoint
@@ -2666,6 +2697,44 @@ linijamoci[5] = { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 };
 }
 
 //**************************************************************************************************************************************
+bool restartWebServer(const char* reason) {
+  Serial.printf("[WEB] Restart requested: %s\n", reason ? reason : "unknown");
+
+  webSocket.closeAll();
+  server.end();
+  delay(150);
+
+  const int maxAttempts = 3;
+  for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+    Serial.printf("[WEB] Restart attempt %d/%d\n", attempt, maxAttempts);
+
+    server.begin();
+    delay(250);
+
+    if (WiFi.status() == WL_CONNECTED) {
+      WiFiClient probe;
+      bool ok = probe.connect(WiFi.localIP(), 80);
+      if (ok) {
+        probe.stop();
+        Serial.println("[WEB] Restart successful");
+        lastServerRestart = millis();
+        return true;
+      }
+    } else {
+      // If station is disconnected we can't probe localIP; still keep server running for AP mode.
+      Serial.println("[WEB] WiFi station disconnected; server started without probe");
+      lastServerRestart = millis();
+      return true;
+    }
+
+    server.end();
+    delay(150);
+  }
+
+  Serial.println("[WEB] Restart failed after retries");
+  return false;
+}
+
 void loop() {
 
   // Check for incoming data from STM32
@@ -2765,10 +2834,11 @@ void loop() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("WiFi reconnected successfully");
     // Restart web server to ensure it's responsive
-    server.end();
-    delay(100);
-    server.begin();
-    Serial.println("Web server restarted");
+    if (restartWebServer("wifi reconnect")) {
+      Serial.println("Web server restarted");
+    } else {
+      Serial.println("Web server restart failed after WiFi reconnect");
+    }
   } else {
     Serial.println("WiFi reconnection failed");
   }
@@ -2832,6 +2902,18 @@ void loop() {
     }
   }
   
+  // Local file OTA trigger - run outside async request context to prevent WDT in async_tcp task
+  if (otaPendingFromLocalFile && otaLocalFilePath.length() > 0) {
+    String localPath = otaLocalFilePath;
+    otaPendingFromLocalFile = false;
+    otaLocalFilePath = "";
+    Serial.println("[OTA] Triggering local file OTA from loop: " + localPath);
+    doLocalOTAFromFile(localPath);
+  } else if (otaPendingFromLocalFile && otaLocalFilePath.length() == 0) {
+    otaPendingFromLocalFile = false;
+    Serial.println("[OTA] Local OTA trigger ignored because file path is empty");
+  }
+
   // Clean up WebSocket connections
   webSocket.cleanupClients();
   
@@ -2848,10 +2930,7 @@ void loop() {
         Serial.println("Web server health check: OK");
       } else {
         Serial.println("Web server health check: FAILED - Restarting server");
-        server.end();
-        delay(100);
-        server.begin();
-        lastServerRestart = millis();
+        restartWebServer("health check failed");
       }
     }
   }
@@ -2859,10 +2938,7 @@ void loop() {
   // Periodic server restart to prevent memory leaks
   if (millis() - lastServerRestart > SERVER_RESTART_INTERVAL) {
     Serial.println("Periodic server restart for maintenance");
-    server.end();
-    delay(100);
-    server.begin();
-    lastServerRestart = millis();
+    restartWebServer("periodic maintenance");
   }
   
   // OPTIONAL: Add debug output (in loop, for testing)
@@ -8587,6 +8663,67 @@ bool checkForUpdates(String& firmwareUrl) {
         Serial.println("[UPDATE] Already running latest version " + firmwareVersion);
         return false;
     }
+}
+
+void doLocalOTAFromFile(const String& fullPath) {
+  Serial.println("[OTA] Starting local OTA from: " + fullPath);
+
+  File firmwareFile = FFat.open(fullPath, FILE_READ);
+  if (!firmwareFile) {
+    Serial.println("[OTA] Failed to open local firmware file");
+    webSocket.textAll("{\"ota_status\":\"file_open_failed\"}");
+    return;
+  }
+
+  size_t firmwareSize = firmwareFile.size();
+  if (firmwareSize == 0) {
+    firmwareFile.close();
+    Serial.println("[OTA] Local firmware file is empty");
+    webSocket.textAll("{\"ota_status\":\"file_empty\"}");
+    return;
+  }
+
+  webSocket.textAll("{\"ota_status\":\"installing_local\"}");
+
+  if (!Update.begin(firmwareSize)) {
+    firmwareFile.close();
+    Serial.println("[OTA] Not enough space for local update");
+    webSocket.textAll("{\"ota_status\":\"no_space\"}");
+    return;
+  }
+
+  uint8_t buffer[1024];
+  size_t written = 0;
+  while (firmwareFile.available()) {
+    size_t readLen = firmwareFile.read(buffer, sizeof(buffer));
+    if (readLen == 0) break;
+
+    size_t chunkWritten = Update.write(buffer, readLen);
+    written += chunkWritten;
+
+    if (chunkWritten != readLen) {
+      Serial.printf("[OTA] Local write mismatch: read %d, wrote %d\n", readLen, chunkWritten);
+      break;
+    }
+
+    esp_task_wdt_reset();
+    vTaskDelay(1);
+  }
+
+  firmwareFile.close();
+
+  if (written == firmwareSize && Update.end(true)) {
+    Serial.println("[OTA] Local OTA successful, rebooting...");
+    webSocket.textAll("{\"ota_status\":\"success\"}");
+    delay(500);
+    ESP.restart();
+    return;
+  }
+
+  Serial.println("[OTA] Local OTA failed");
+  Update.printError(Serial);
+  Update.abort();
+  webSocket.textAll("{\"ota_status\":\"failed\"}");
 }
 
 // OTA update function
