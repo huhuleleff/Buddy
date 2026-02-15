@@ -3479,6 +3479,24 @@ struct UrnikGridStyle {
   uint8_t cellInnerH;
 };
 
+// URNIK GRID SIZE TUNING:
+// - increase URNIK_CELL_INNER_H for taller bars
+// - increase URNIK_CELL_INNER_W for wider bars
+// - keep *_STEP values in sync so slots don't overlap too much
+const uint8_t URNIK_DAY_MARKER_X = 4;
+const uint8_t URNIK_DAY_LABEL_X = 10;
+const uint8_t URNIK_COL_START_X = 30;
+const uint8_t URNIK_COL_STEP = 5;
+const uint8_t URNIK_CELL_INNER_W = 4;
+const uint8_t URNIK_CELL_INNER_H = 7;
+const uint8_t URNIK_CELL_W = 6;
+const uint8_t URNIK_CELL_H = 9;
+const uint8_t URNIK_TOP_START_Y = 0;
+const uint8_t URNIK_TOP_END_Y = 55;
+const uint8_t URNIK_BOTTOM_START_Y = 71;
+const uint8_t URNIK_BOTTOM_END_Y = 121;
+const uint8_t URNIK_ROW_STEP = 8;
+
 void drawUrnikCell(uint8_t x, uint8_t y, uint8_t value, bool selected, const UrnikGridStyle& style) {
   const uint8_t fillLevel = map(value, 0, 100, 0, style.cellInnerH - 1);
   const uint8_t innerStartX = x + 1;
@@ -3623,13 +3641,27 @@ urnikizrisan = 0;
       if (urnikizbranakockaY > 6) {tft.print(casovnirazpored[urnikizbranakockaY - 7][urnikizbranakockaX]);} else{tft.print(casovnirazpored[urnikizbranakockaY][urnikizbranakockaX]);}
  tft.print("%) ");
 
-    const UrnikGridStyle gridStyle = {0, 55, 8, 10, 4, 30, 145, 5, 6, 9, 4, 7};
+    const uint8_t urnikColEndX = URNIK_COL_START_X + (URNIK_COL_STEP * 23);
+    const UrnikGridStyle gridStyle = {
+      URNIK_TOP_START_Y,
+      URNIK_TOP_END_Y,
+      URNIK_ROW_STEP,
+      URNIK_DAY_LABEL_X,
+      URNIK_DAY_MARKER_X,
+      URNIK_COL_START_X,
+      urnikColEndX,
+      URNIK_COL_STEP,
+      URNIK_CELL_W,
+      URNIK_CELL_H,
+      URNIK_CELL_INNER_W,
+      URNIK_CELL_INNER_H
+    };
 
     drawUrnikHalf(0, 0, 0, 23, gridStyle);
 
     UrnikGridStyle lowerHalfStyle = gridStyle;
-    lowerHalfStyle.rowStartY = 71;
-    lowerHalfStyle.rowEndY = 121;
+    lowerHalfStyle.rowStartY = URNIK_BOTTOM_START_Y;
+    lowerHalfStyle.rowEndY = URNIK_BOTTOM_END_Y;
     drawUrnikHalf(7, 7, 24, 47, lowerHalfStyle);
   }
 }
