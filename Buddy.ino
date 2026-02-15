@@ -4606,6 +4606,15 @@ void drawLargeCircle(int x0, int y0, uint32_t color, int radius) {
   }
 }
 
+uint16_t getPowerGraphGradientColor(int x) {
+  float blend = (float)x / (DISPLAY_WIDTH - 1);
+  float smoothBlend = blend * blend * (3.0f - 2.0f * blend);  // smoothstep for softer transition
+  uint8_t r = 24 + (uint8_t)(78 * smoothBlend);
+  uint8_t g = 24 + (uint8_t)(18 * smoothBlend);
+  uint8_t b = 30 + (uint8_t)(16 * smoothBlend);
+  return tft.color565(r, g, b);
+}
+
 void drawPowerGraphPlotArea() {
   const int graphX = 36;
   const int graphY = 16;
@@ -4620,11 +4629,7 @@ void drawPowerGraphPlotArea() {
   int clearBottom = min(DISPLAY_HEIGHT - 1, graphY + graphH + clearMargin);
 
   for (int x = clearX; x <= clearRight; x++) {
-    float blend = (float)x / (DISPLAY_WIDTH - 1);
-    uint8_t r = 28 + (uint8_t)(70 * blend);
-    uint8_t g = 28 + (uint8_t)(12 * blend);
-    uint8_t b = 32 + (uint8_t)(12 * blend);
-    tft.drawFastVLine(x, clearY, clearBottom - clearY + 1, tft.color565(r, g, b));
+    tft.drawFastVLine(x, clearY, clearBottom - clearY + 1, getPowerGraphGradientColor(x));
   }
 
   uint16_t gridColor = tft.color565(90, 90, 95);
@@ -4645,11 +4650,7 @@ void drawPowerGraphPlotArea() {
 
 void drawPowerGraphBackground() {
   for (int x = 0; x < DISPLAY_WIDTH; x++) {
-    float blend = (float)x / (DISPLAY_WIDTH - 1);
-    uint8_t r = 28 + (uint8_t)(70 * blend);
-    uint8_t g = 28 + (uint8_t)(12 * blend);
-    uint8_t b = 32 + (uint8_t)(12 * blend);
-    tft.drawFastVLine(x, 0, DISPLAY_HEIGHT, tft.color565(r, g, b));
+    tft.drawFastVLine(x, 0, DISPLAY_HEIGHT, getPowerGraphGradientColor(x));
   }
 
   drawPowerGraphPlotArea();
@@ -4707,7 +4708,7 @@ void drawPowerGraphThickLine(int x1, int y1, int x2, int y2, uint16_t color) {
   tft.drawLine(x1, y1 + 1, x2, y2 + 1, color);
 }
 
-void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex) {
+void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int selectedIndex) {
   const int graphX = 36;
   const int graphY = 16;
   const int graphW = DISPLAY_WIDTH - 52;
@@ -4739,14 +4740,10 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex) {
   int regionX = max(0, minX - redrawMargin);
   int regionY = max(0, minY - redrawMargin);
   int regionRight = min(DISPLAY_WIDTH - 1, maxX + redrawMargin);
-  int regionBottom = min(DISPLAY_HEIGHT - 1, maxY + redrawMargin);
+  int regionBottom = min(graphBottom, maxY + redrawMargin);
 
   for (int x = regionX; x <= regionRight; x++) {
-    float blend = (float)x / (DISPLAY_WIDTH - 1);
-    uint8_t r = 28 + (uint8_t)(70 * blend);
-    uint8_t g = 28 + (uint8_t)(12 * blend);
-    uint8_t b = 32 + (uint8_t)(12 * blend);
-    tft.drawFastVLine(x, regionY, regionBottom - regionY + 1, tft.color565(r, g, b));
+    tft.drawFastVLine(x, regionY, regionBottom - regionY + 1, getPowerGraphGradientColor(x));
   }
 
   uint16_t gridColor = tft.color565(90, 90, 95);
@@ -4811,12 +4808,14 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex) {
     drawPowerGraphThickLine(x1, y1, x2, y2, TFT_RED);
   }
 
-  int selectedX = map(izbirnik, 0, 9, graphX, graphRight);
-  int selectedY = map(linijamoci[row][izbirnik], 0, 100, graphBottom, graphY);
-  selectedX = constrain(selectedX, graphX, graphRight);
-  selectedY = constrain(selectedY, graphY, graphBottom);
-  if (selectedX >= regionX - 6 && selectedX <= regionRight + 6 && selectedY >= regionY - 6 && selectedY <= regionBottom + 6) {
-    drawLargeCircle(selectedX, selectedY, TFT_YELLOW, 5);
+  if (selectedIndex >= 0 && selectedIndex <= 9) {
+    int selectedX = map(selectedIndex, 0, 9, graphX, graphRight);
+    int selectedY = map(linijamoci[row][selectedIndex], 0, 100, graphBottom, graphY);
+    selectedX = constrain(selectedX, graphX, graphRight);
+    selectedY = constrain(selectedY, graphY, graphBottom);
+    if (selectedX >= regionX - 6 && selectedX <= regionRight + 6 && selectedY >= regionY - 6 && selectedY <= regionBottom + 6) {
+      drawLargeCircle(selectedX, selectedY, TFT_YELLOW, 5);
+    }
   }
 }
 
@@ -7239,13 +7238,15 @@ void tipke() {
         if (flaggrafmoci) {
           if (!flagvstopizbirnik) {
             if (izbirnik > 0) {
-              grafmocizrisan = 0;
+              int oldIzbirnik = izbirnik;
               izbirnik--;
+              redrawPowerGraphPointArea(pristej, oldIzbirnik, izbirnik);
+              redrawPowerGraphPointArea(pristej, izbirnik, izbirnik);
             }
           } else if (linijamoci[indup2 + pristej][izbirnik] > 0) {
             linijamoci[indup2 + pristej][izbirnik] -= 2;
             ;
-            redrawPowerGraphPointArea(pristej, izbirnik);
+            redrawPowerGraphPointArea(pristej, izbirnik, izbirnik);
             flagzaklenivstop2 = 0;
           }
         }
@@ -7508,13 +7509,15 @@ void tipke() {
         if (flaggrafmoci) {
           if (!flagvstopizbirnik) {
             if (izbirnik < 9) {
-              grafmocizrisan = 0;
+              int oldIzbirnik = izbirnik;
               izbirnik++;
+              redrawPowerGraphPointArea(pristej, oldIzbirnik, izbirnik);
+              redrawPowerGraphPointArea(pristej, izbirnik, izbirnik);
             }
           } else if (linijamoci[indup2 + pristej][izbirnik] < 99) {
             linijamoci[indup2 + pristej][izbirnik] += 2;
             ;
-            redrawPowerGraphPointArea(pristej, izbirnik);
+            redrawPowerGraphPointArea(pristej, izbirnik, izbirnik);
             flagzaklenivstop3 = 0;
           }
         }
