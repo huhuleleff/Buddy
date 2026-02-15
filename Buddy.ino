@@ -2399,7 +2399,98 @@ linijamoci[5] = { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 };
 
   // OTA Update from local file endpoint
   server.on("/ota/update", HTTP_POST, [](AsyncWebServerRequest *request) {
+
     if (!request->hasParam("filename", true)) {
+
+    if (request->hasParam("filename", true)) {
+      String filename = request->getParam("filename", true)->value();
+      
+      Serial.println("[OTA] Requested update for file: " + filename);
+      
+      if (!filename.endsWith(".bin")) {
+        request->send(400, "text/plain", "Invalid file type");
+        return;
+      }
+      
+      String fullPath = "/" + filename;
+      Serial.println("[OTA] Looking for file at: " + fullPath);
+      Serial.println("[OTA] File exists: " + String(FFat.exists(fullPath) ? "YES" : "NO"));
+      
+      // List all files in root for debugging
+      File root = FFat.open("/");
+      if (root) {
+        Serial.println("[OTA] Files in FATFS root:");
+        File file = root.openNextFile();
+        while (file) {
+          String fileName = file.name();
+          Serial.println("[OTA] - " + fileName + " (" + String(file.size()) + " bytes)");
+          file.close();
+          file = root.openNextFile();
+        }
+        root.close();
+      }
+      
+      if (FFat.exists(fullPath)) {
+        File firmwareFile = FFat.open(fullPath, "r");
+        if (firmwareFile) {
+          size_t firmwareSize = firmwareFile.size();
+          Serial.println("[OTA] Firmware file size: " + String(firmwareSize) + " bytes");
+          
+          webSocket.textAll("{\"ota_status\":\"installing\"}");
+          
+          if (Update.begin(firmwareSize)) {
+            Serial.println("Starting OTA update from: " + filename);
+            
+            size_t written = 0;
+            size_t chunkSize = 1024; // Process in chunks
+            uint8_t buffer[chunkSize];
+            
+            while (firmwareFile.available()) {
+              size_t read = firmwareFile.read(buffer, chunkSize);
+              written += Update.write(buffer, read);
+              
+              // Feed watchdog to prevent timeout
+              esp_task_wdt_reset();
+              yield(); // Allow other tasks to run
+              
+              // Progress reporting every 100KB
+              if (written % 100000 == 0) {
+                Serial.printf("[OTA] Progress: %d/%d bytes (%d%%)\n", written, firmwareSize, (written * 100) / firmwareSize);
+              }
+            }
+            
+            firmwareFile.close();
+            
+            Serial.println("[OTA] Written: " + String(written) + " bytes");
+            
+            if (written == firmwareSize && Update.end(true)) {
+              Serial.println("OTA update successful");
+              webSocket.textAll("{\"ota_status\":\"success\"}");
+              request->send(200, "text/plain", "Update successful. Rebooting...");
+              
+              delay(1000);
+              ESP.restart();
+            } else {
+              Serial.println("OTA update failed");
+              Update.printError(Serial);
+              webSocket.textAll("{\"ota_status\":\"failed\"}");
+              request->send(500, "text/plain", "Update failed");
+            }
+          } else {
+            Serial.println("[OTA] Not enough space for update");
+            webSocket.textAll("{\"ota_status\":\"no_space\"}");
+            request->send(500, "text/plain", "Not enough space");
+          }
+        } else {
+          Serial.println("[OTA] Failed to open firmware file");
+          request->send(404, "text/plain", "File not found");
+        }
+      } else {
+        Serial.println("[OTA] Firmware file not found");
+        request->send(404, "text/plain", "File not found");
+      }
+    } else {
+
       request->send(400, "text/plain", "Missing filename");
       return;
     }
