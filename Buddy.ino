@@ -2293,15 +2293,25 @@ linijamoci[5] = { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 };
   server.on("/api/discordToken", HTTP_POST, [](AsyncWebServerRequest *request){
     if (request->hasParam("webhookUrl", true)) {
       String newWebhookUrl = request->getParam("webhookUrl", true)->value();
-      if (newWebhookUrl.length() > 0) {
-        discordWebhookUrl = newWebhookUrl;
-        if (saveStringToSPIFFS("/DISCORD_TOKEN.bin", discordWebhookUrl)) {
-          request->send(200, "application/json", "{\"success\":true,\"message\":\"Discord webhook URL saved successfully\"}");
-        } else {
-          request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to save Discord webhook URL\"}");
-        }
-      } else {
+      newWebhookUrl.trim();
+
+      if (newWebhookUrl.length() == 0) {
         request->send(400, "application/json", "{\"success\":false,\"message\":\"Discord webhook URL cannot be empty\"}");
+        return;
+      }
+
+      if (!newWebhookUrl.startsWith("https://discord.com/api/webhooks/")) {
+        request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid Discord webhook URL format\"}");
+        return;
+      }
+
+      String previousWebhookUrl = discordWebhookUrl;
+      if (saveStringToSPIFFS("/DISCORD_TOKEN.bin", newWebhookUrl)) {
+        discordWebhookUrl = newWebhookUrl;
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"Discord webhook URL saved successfully\"}");
+      } else {
+        discordWebhookUrl = previousWebhookUrl;
+        request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to save Discord webhook URL\"}");
       }
     } else {
       request->send(400, "application/json", "{\"success\":false,\"message\":\"Missing webhookUrl parameter\"}");
@@ -2407,6 +2417,7 @@ linijamoci[5] = { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 };
         while (file) {
           String fileName = file.name();
           Serial.println("[OTA] - " + fileName + " (" + String(file.size()) + " bytes)");
+          file.close();
           file = root.openNextFile();
         }
         root.close();
@@ -2793,9 +2804,15 @@ void loop() {
   
   // OTA update trigger - when user provides URL via browser
   if (otaTriggered && defaultFirmwareUrl.length() > 0) {
+    // Reset trigger BEFORE running OTA to avoid retry loop on failed update/no-update
+    otaTriggered = false;
     Serial.println("triggering OTA update...");
     Serial.println("Firmware URL: " + defaultFirmwareUrl);
     doOTA();
+  } else if (otaTriggered && defaultFirmwareUrl.length() == 0) {
+    // Defensive reset for invalid empty URL state
+    otaTriggered = false;
+    Serial.println("[OTA] Trigger ignored because firmware URL is empty");
   }
   
   // Delayed OTA update trigger - from automatic update check
@@ -3743,15 +3760,28 @@ bool loadIntFromSPIFFS(const char* path, int& value) {
 }
 
 bool saveStringToSPIFFS(const char* path, const String& value) {
+  // Ensure FFat is available
+  if (!FFat.begin(true)) {
+    Serial.printf("[FS] ERROR: FFat not available for %s\n", path);
+    napaka = 2;  // ne morem shraniti
+    return false;
+  }
+
   fs::File file = FFat.open(path, FILE_WRITE);
   if (!file) {
     napaka = 2;  // ne morem shraniti
     return false;
   }
 
-  file.write((const uint8_t*)value.c_str(), value.length());
+  size_t expected = value.length();
+  size_t bytesWritten = file.write((const uint8_t*)value.c_str(), expected);
   file.flush(); // Vital: ensures data is physically moved from RAM to Flash
   file.close(); // Vital: releases the handle for the next file
+
+  if (bytesWritten != expected) {
+    Serial.printf("[FS] ERROR: saveStringToSPIFFS write mismatch for %s (expected %d, wrote %d)\n", path, expected, bytesWritten);
+    return false;
+  }
 
   return true;
 }
@@ -3771,12 +3801,16 @@ bool loadStringFromSPIFFS(const char* path, String& value) {
   }
 
   std::unique_ptr<char[]> buf(new char[size + 1]);
-  file.readBytes(buf.get(), size);
-  buf[size] = '\0';
-
-  value = String(buf.get());
-
+  size_t bytesRead = file.readBytes(buf.get(), size);
   file.close();
+
+  if (bytesRead != size) {
+    Serial.printf("[FS] ERROR: loadStringFromSPIFFS read mismatch for %s (expected %d, read %d)\n", path, size, bytesRead);
+    return false;
+  }
+
+  buf[size] = '\0';
+  value = String(buf.get());
   return true;
 }
 
@@ -8270,10 +8304,12 @@ bool removeDirRecursive(fs::FS &fs, const char *path) {
    File file = root.openNextFile();
    while (file) {
       String filePath = String(path) + "/" + file.name();
-      if (file.isDirectory()) {
+      bool isDirectory = file.isDirectory();
+      file.close();
+
+      if (isDirectory) {
          if (!removeDirRecursive(fs, filePath.c_str())) {
             Serial.printf("Failed to remove subdirectory: %s\n", filePath.c_str());
-            file.close();
             root.close();
             return false;
          }
@@ -8292,7 +8328,6 @@ bool removeDirRecursive(fs::FS &fs, const char *path) {
          
          if (!fileRemoved) {
             Serial.printf("Failed to remove file after 3 attempts: %s\n", filePath.c_str());
-            file.close();
             root.close();
             return false;
          }
@@ -8340,7 +8375,12 @@ String getStorageStats() {
 
 String listDirJSON(fs::FS &fs, const String& path) {
    File root = fs.open(path.c_str());
-   if (!root || !root.isDirectory()) {
+   if (!root) {
+      return "[]";
+   }
+
+   if (!root.isDirectory()) {
+      root.close();
       return "[]";
    }
 
@@ -8385,8 +8425,10 @@ String listDirJSON(fs::FS &fs, const String& path) {
       json += "\"type\":\"" + String(file.isDirectory() ? "directory" : "file") + "\"";
       json += "}";
 
+      file.close();
       file = root.openNextFile();
    }
+   root.close();
    json += "]";
    
    Serial.println("JSON for path " + path + ": " + json);
@@ -8421,6 +8463,7 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
    }
    if (!root.isDirectory()) {
       Serial.println("Not a directory");
+      root.close();
       return;
    }
 
@@ -8438,8 +8481,10 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
          Serial.print("\tSIZE: ");
          Serial.println(file.size());
       }
+      file.close();
       file = root.openNextFile();
    }
+   root.close();
 }
 // ============================================================================
 // AUTOMATIC FIRMWARE UPDATE FUNCTIONS
