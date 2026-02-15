@@ -3464,6 +3464,105 @@ int dayOfWeek() {
   return h;
 }
 
+struct UrnikGridStyle {
+  uint8_t rowStartY;
+  uint8_t rowEndY;
+  uint8_t rowStep;
+  uint8_t dayLabelX;
+  uint8_t dayMarkerX;
+  uint8_t colStartX;
+  uint8_t colEndX;
+  uint8_t colStep;
+  uint8_t cellW;
+  uint8_t cellH;
+  uint8_t cellInnerW;
+  uint8_t cellInnerH;
+};
+
+// URNIK GRID SIZE TUNING (automatic follow):
+// Change only inner size values below; all dependent sizes/steps/ranges are derived.
+const uint8_t URNIK_DAY_MARKER_X = 4;
+const uint8_t URNIK_DAY_LABEL_X = 10;
+const uint8_t URNIK_COL_START_X = 30;
+const uint8_t URNIK_TOP_START_Y = 0;
+
+const uint8_t URNIK_CELL_INNER_W = 4;
+const uint8_t URNIK_CELL_INNER_H = 7;
+const uint8_t URNIK_CELL_BORDER = 1;      // 1 px border around inner fill area
+const uint8_t URNIK_CELL_OVERLAP_X = 1;   // keep historical dense look
+const uint8_t URNIK_CELL_OVERLAP_Y = 1;
+const uint8_t URNIK_HALF_GAP_Y = 16;      // vertical distance between top and bottom halves
+
+const uint8_t URNIK_CELL_W = URNIK_CELL_INNER_W + (2 * URNIK_CELL_BORDER);
+const uint8_t URNIK_CELL_H = URNIK_CELL_INNER_H + (2 * URNIK_CELL_BORDER);
+const uint8_t URNIK_COL_STEP = URNIK_CELL_W - URNIK_CELL_OVERLAP_X;
+const uint8_t URNIK_ROW_STEP = URNIK_CELL_H - URNIK_CELL_OVERLAP_Y;
+const uint8_t URNIK_TOP_END_Y = URNIK_TOP_START_Y + (URNIK_ROW_STEP * 6);
+const uint8_t URNIK_BOTTOM_START_Y = URNIK_TOP_END_Y + URNIK_HALF_GAP_Y;
+const uint8_t URNIK_BOTTOM_END_Y = URNIK_BOTTOM_START_Y + (URNIK_ROW_STEP * 6);
+
+void drawUrnikCell(uint8_t x, uint8_t y, uint8_t value, bool selected, const UrnikGridStyle& style) {
+  const uint8_t fillLevel = map(value, 0, 100, 0, style.cellInnerH - 1);
+  const uint8_t innerStartX = x + 1;
+  const uint8_t innerEndX = x + style.cellInnerW;
+  const uint8_t innerBottomY = y + style.cellInnerH;
+
+  tft.drawRect(x, y, style.cellW, style.cellH, TFT_RED);
+
+  for (int i = style.cellInnerH - 1; i >= fillLevel; i--) {
+    tft.drawLine(innerStartX, innerBottomY - i, innerEndX, innerBottomY - i, TFT_BLUE);
+  }
+
+  if (value != 0) {
+    for (int i = 0; i <= fillLevel; i++) {
+      tft.drawLine(innerStartX, innerBottomY - i, innerEndX, innerBottomY - i, TFT_GREEN);
+    }
+
+    if (value > 0) {
+      tft.drawLine(innerStartX, innerBottomY, innerEndX, innerBottomY, TFT_GREEN);
+    }
+  } else {
+    tft.fillRect(x + 1, y + 1, style.cellInnerW, style.cellInnerH, TFT_BLUE);
+  }
+
+  if (selected) {
+    tft.drawRect(x + 1, y + 1, style.cellInnerW, style.cellInnerH, TFT_ORANGE);
+  }
+}
+
+void drawUrnikHalf(uint8_t dayIndexStart,
+                   uint8_t dayLabelOffset,
+                   uint8_t slotStart,
+                   uint8_t slotEnd,
+                   const UrnikGridStyle& style) {
+  uint8_t localDayIndex = dayIndexStart;
+
+  for (uint8_t rowY = style.rowStartY; rowY <= style.rowEndY; rowY += style.rowStep) {
+    if (localDayIndex == urnikizbranakockaY) {
+      tft.setTextColor(TFT_RED, TFT_BLUE);
+      tft.setCursor(style.dayMarkerX, rowY);
+      tft.print(">");
+    } else {
+      tft.setCursor(style.dayMarkerX, rowY);
+      tft.print(" ");
+    }
+
+    tft.setTextColor(TFT_BLACK, TFT_BLUE);
+    tft.drawString(dan[localDayIndex - dayLabelOffset], style.dayLabelX, rowY, 1);
+
+    uint8_t localSlot = slotStart;
+    for (uint8_t colX = style.colStartX; colX <= style.colEndX; colX += style.colStep) {
+      const uint8_t value = casovnirazpored[localDayIndex - dayLabelOffset][localSlot];
+      const bool selected = (localSlot == urnikizbranakockaX && localDayIndex == urnikizbranakockaY);
+      drawUrnikCell(colX, rowY, value, selected, style);
+
+      if (localSlot < slotEnd) { localSlot++; }
+    }
+
+    if (localDayIndex < (dayIndexStart + 6)) { localDayIndex++; }
+  }
+}
+
 void urnik() {
 
   katerdan = 0;
@@ -3546,121 +3645,28 @@ urnikizrisan = 0;
       if (urnikizbranakockaY > 6) {tft.print(casovnirazpored[urnikizbranakockaY - 7][urnikizbranakockaX]);} else{tft.print(casovnirazpored[urnikizbranakockaY][urnikizbranakockaX]);}
  tft.print("%) ");
 
-    for (pozy = 0; pozy <= 55; pozy += 8) {
+    const uint8_t urnikColEndX = URNIK_COL_START_X + (URNIK_COL_STEP * 23);
+    const UrnikGridStyle gridStyle = {
+      URNIK_TOP_START_Y,
+      URNIK_TOP_END_Y,
+      URNIK_ROW_STEP,
+      URNIK_DAY_LABEL_X,
+      URNIK_DAY_MARKER_X,
+      URNIK_COL_START_X,
+      urnikColEndX,
+      URNIK_COL_STEP,
+      URNIK_CELL_W,
+      URNIK_CELL_H,
+      URNIK_CELL_INNER_W,
+      URNIK_CELL_INNER_H
+    };
 
+    drawUrnikHalf(0, 0, 0, 23, gridStyle);
 
-      if (katerdan == urnikizbranakockaY) {
-        tft.setTextColor(TFT_RED, TFT_BLUE);
-        //tft.setCursor(4, pozy-8);
-        //   tft.print(" ");// pobrisemo sledi po pomikih
-        tft.setCursor(4, pozy);
-        tft.print(">");
-        //  tft.setCursor(4, pozy+8);
-        // tft.print(" ");// pobrisemo sledi po pomikih
-      } else {
-        tft.setCursor(4, pozy);
-        tft.print(" ");
-      }  // POCISTIMO VSA OSTALA MESTA
-
-      tft.setTextColor(TFT_BLACK, TFT_BLUE);
-
-      tft.drawString(dan[katerdan], 10, pozy, 1);
-
-
-      for (pozx = 30; pozx <= 145; pozx += 5) {
-        uint8_t napolnjen;
-        napolnjen = map(casovnirazpored[katerdan][kateraura], 0, 100, 0, 6);
-
-        tft.drawRect(pozx, pozy, 6, 9, TFT_RED);
-
-        for (int i = 6; i >= napolnjen; i -= 1) {
-          tft.drawLine(pozx + 1, pozy + 7 - i, pozx + 4, pozy + 7 - i, TFT_BLUE);
-        }
-
-        if (casovnirazpored[katerdan][kateraura] != 0) {
-          for (int i = 0; i <= napolnjen; i += 1) {
-            tft.drawLine(pozx + 1, pozy + 7 - i, pozx + 4, pozy + 7 - i, TFT_GREEN);
-          }
-
-
-          if (casovnirazpored[katerdan][kateraura] > 0) {
-            tft.drawLine(pozx + 1, pozy + 7, pozx + 4, pozy + 7, TFT_GREEN);
-          }
-
-          //tft.fillRect(pozx+1, pozy+1, 4, napolnjen, TFT_GREEN);
-        } else {
-          tft.fillRect(pozx + 1, pozy + 1, 4, 7, TFT_BLUE);
-        }
-
-        if (kateraura == urnikizbranakockaX && katerdan == urnikizbranakockaY) {
-
-          tft.drawRect(pozx + 1, pozy + 1, 4, 7, TFT_ORANGE);
-        }
-
-        if (kateraura < 23) { kateraura++; }
-      }
-      kateraura = 0;
-      if (katerdan < 6) { katerdan++; }
-    }
-    //************************************************************************** DRUGA POLOVICA URNIKA
-    katerdan = 7;
-    kateraura = 24;
-
-    for (pozy = 71; pozy <= 121; pozy += 8) {
-
-
-      if (katerdan == urnikizbranakockaY) {
-        tft.setTextColor(TFT_RED, TFT_BLUE);
-        //tft.setCursor(4, pozy-8);
-        //   tft.print(" ");// pobrisemo sledi po pomikih
-        tft.setCursor(4, pozy);
-        tft.print(">");
-        //  tft.setCursor(4, pozy+8);
-        // tft.print(" ");// pobrisemo sledi po pomikih
-      } else {
-        tft.setCursor(4, pozy);
-        tft.print(" ");
-      }  // POCISTIMO VSA OSTALA MESTA
-
-      tft.setTextColor(TFT_BLACK, TFT_BLUE);
-
-      tft.drawString(dan[katerdan - 7], 10, pozy, 1);
-
-
-      for (pozx = 30; pozx <= 145; pozx += 5) {
-
-        uint8_t napolnjen;
-        napolnjen = map(casovnirazpored[katerdan - 7][kateraura], 0, 100, 0, 6);
-
-        tft.drawRect(pozx, pozy, 6, 9, TFT_RED);
-
-        for (int i = 6; i >= napolnjen; i -= 1) {
-          tft.drawLine(pozx + 1, pozy + 7 - i, pozx + 4, pozy + 7 - i, TFT_BLUE);
-        }
-
-        if (casovnirazpored[katerdan - 7][kateraura] != 0) {
-          for (int i = 0; i <= napolnjen; i += 1) {
-            tft.drawLine(pozx + 1, pozy + 7 - i, pozx + 4, pozy + 7 - i, TFT_GREEN);
-          }
-
-
-          if (casovnirazpored[katerdan - 7][kateraura] > 0) {
-            tft.drawLine(pozx + 1, pozy + 7, pozx + 4, pozy + 7, TFT_GREEN);
-          }
-        } else {
-          tft.fillRect(pozx + 1, pozy + 1, 4, 7, TFT_BLUE);
-        }
-
-        if (kateraura == urnikizbranakockaX && katerdan == urnikizbranakockaY) {
-
-          tft.drawRect(pozx + 1, pozy + 1, 4, 7, TFT_ORANGE);
-        }
-
-        if (kateraura < 47) { kateraura++; }
-      }
-      kateraura = 24;
-      if (katerdan < 13) { katerdan++; }
-    }
+    UrnikGridStyle lowerHalfStyle = gridStyle;
+    lowerHalfStyle.rowStartY = URNIK_BOTTOM_START_Y;
+    lowerHalfStyle.rowEndY = URNIK_BOTTOM_END_Y;
+    drawUrnikHalf(7, 7, 24, 47, lowerHalfStyle);
   }
 }
 
