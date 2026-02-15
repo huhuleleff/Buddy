@@ -2407,6 +2407,7 @@ linijamoci[5] = { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 };
         while (file) {
           String fileName = file.name();
           Serial.println("[OTA] - " + fileName + " (" + String(file.size()) + " bytes)");
+          file.close();
           file = root.openNextFile();
         }
         root.close();
@@ -8270,10 +8271,12 @@ bool removeDirRecursive(fs::FS &fs, const char *path) {
    File file = root.openNextFile();
    while (file) {
       String filePath = String(path) + "/" + file.name();
-      if (file.isDirectory()) {
+      bool isDirectory = file.isDirectory();
+      file.close();
+
+      if (isDirectory) {
          if (!removeDirRecursive(fs, filePath.c_str())) {
             Serial.printf("Failed to remove subdirectory: %s\n", filePath.c_str());
-            file.close();
             root.close();
             return false;
          }
@@ -8292,7 +8295,6 @@ bool removeDirRecursive(fs::FS &fs, const char *path) {
          
          if (!fileRemoved) {
             Serial.printf("Failed to remove file after 3 attempts: %s\n", filePath.c_str());
-            file.close();
             root.close();
             return false;
          }
@@ -8340,7 +8342,12 @@ String getStorageStats() {
 
 String listDirJSON(fs::FS &fs, const String& path) {
    File root = fs.open(path.c_str());
-   if (!root || !root.isDirectory()) {
+   if (!root) {
+      return "[]";
+   }
+
+   if (!root.isDirectory()) {
+      root.close();
       return "[]";
    }
 
@@ -8385,8 +8392,10 @@ String listDirJSON(fs::FS &fs, const String& path) {
       json += "\"type\":\"" + String(file.isDirectory() ? "directory" : "file") + "\"";
       json += "}";
 
+      file.close();
       file = root.openNextFile();
    }
+   root.close();
    json += "]";
    
    Serial.println("JSON for path " + path + ": " + json);
@@ -8421,6 +8430,7 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
    }
    if (!root.isDirectory()) {
       Serial.println("Not a directory");
+      root.close();
       return;
    }
 
@@ -8438,8 +8448,10 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
          Serial.print("\tSIZE: ");
          Serial.println(file.size());
       }
+      file.close();
       file = root.openNextFile();
    }
+   root.close();
 }
 // ============================================================================
 // AUTOMATIC FIRMWARE UPDATE FUNCTIONS
