@@ -4611,13 +4611,20 @@ void drawPowerGraphPlotArea() {
   const int graphY = 16;
   const int graphW = DISPLAY_WIDTH - 52;
   const int graphH = DISPLAY_HEIGHT - 44;
+  const int pointRadius = 5;
+  const int clearMargin = pointRadius + 1;
 
-  for (int x = graphX; x <= graphX + graphW; x++) {
+  int clearX = max(0, graphX - clearMargin);
+  int clearY = max(0, graphY - clearMargin);
+  int clearRight = min(DISPLAY_WIDTH - 1, graphX + graphW + clearMargin);
+  int clearBottom = min(DISPLAY_HEIGHT - 1, graphY + graphH + clearMargin);
+
+  for (int x = clearX; x <= clearRight; x++) {
     float blend = (float)x / (DISPLAY_WIDTH - 1);
     uint8_t r = 28 + (uint8_t)(70 * blend);
     uint8_t g = 28 + (uint8_t)(12 * blend);
     uint8_t b = 32 + (uint8_t)(12 * blend);
-    tft.drawFastVLine(x, graphY, graphH + 1, tft.color565(r, g, b));
+    tft.drawFastVLine(x, clearY, clearBottom - clearY + 1, tft.color565(r, g, b));
   }
 
   uint16_t gridColor = tft.color565(90, 90, 95);
@@ -4655,7 +4662,7 @@ void drawPowerGraphBackground() {
   tft.setTextColor(TFT_WHITE);
   tft.setTextSize(1);
 
-  for (int tempC = 0; tempC <= 40; tempC += 5) {
+  for (int tempC = 0; tempC <= 40; tempC += 4) {
     int x = map(tempC, 0, 40, graphX, graphX + graphW);
     tft.setCursor(x - (tempC >= 10 ? 6 : 3), graphY + graphH + 4);
     tft.print(tempC);
@@ -4663,7 +4670,7 @@ void drawPowerGraphBackground() {
   tft.setCursor(graphX + graphW - 4, graphY + graphH + 14);
   tft.print("C");
 
-  for (int power = 0; power <= 100; power += 20) {
+  for (int power = 0; power <= 100; power += 10) {
     int y = map(power, 0, 100, graphY + graphH, graphY);
     tft.setCursor(2, y - 3);
     tft.print(power);
@@ -4692,6 +4699,124 @@ void dolocimocssr() {
     }
 
     procenti[i] = map(vlaznost, merjenci[1][indeks2 - 1], merjenci[1][indeks2], linijamoci[i][indeks2 - 1], linijamoci[i][indeks2]);
+  }
+}
+
+void drawPowerGraphThickLine(int x1, int y1, int x2, int y2, uint16_t color) {
+  tft.drawLine(x1, y1, x2, y2, color);
+  tft.drawLine(x1, y1 + 1, x2, y2 + 1, color);
+}
+
+void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex) {
+  const int graphX = 36;
+  const int graphY = 16;
+  const int graphW = DISPLAY_WIDTH - 52;
+  const int graphH = DISPLAY_HEIGHT - 44;
+  const int graphRight = graphX + graphW;
+  const int graphBottom = graphY + graphH;
+  const int row = indup2 + pristej;
+
+  int startPoint = max(0, pointIndex - 1);
+  int endPoint = min(9, pointIndex + 1);
+
+  int minX = graphRight;
+  int maxX = graphX;
+  int minY = graphBottom;
+  int maxY = graphY;
+
+  for (int i = startPoint; i <= endPoint; i++) {
+    int px = map(i, 0, 9, graphX, graphRight);
+    int py = map(linijamoci[row][i], 0, 100, graphBottom, graphY);
+    px = constrain(px, graphX, graphRight);
+    py = constrain(py, graphY, graphBottom);
+    minX = min(minX, px);
+    maxX = max(maxX, px);
+    minY = min(minY, py);
+    maxY = max(maxY, py);
+  }
+
+  const int redrawMargin = 10;
+  int regionX = max(0, minX - redrawMargin);
+  int regionY = max(0, minY - redrawMargin);
+  int regionRight = min(DISPLAY_WIDTH - 1, maxX + redrawMargin);
+  int regionBottom = min(DISPLAY_HEIGHT - 1, maxY + redrawMargin);
+
+  for (int x = regionX; x <= regionRight; x++) {
+    float blend = (float)x / (DISPLAY_WIDTH - 1);
+    uint8_t r = 28 + (uint8_t)(70 * blend);
+    uint8_t g = 28 + (uint8_t)(12 * blend);
+    uint8_t b = 32 + (uint8_t)(12 * blend);
+    tft.drawFastVLine(x, regionY, regionBottom - regionY + 1, tft.color565(r, g, b));
+  }
+
+  uint16_t gridColor = tft.color565(90, 90, 95);
+  uint16_t axisColor = tft.color565(210, 210, 210);
+
+  for (int i = 0; i <= 10; i++) {
+    int x = graphX + (graphW * i) / 10;
+    if (x >= regionX && x <= regionRight) {
+      int y0 = max(graphY, regionY);
+      int y1 = min(graphBottom, regionBottom);
+      if (y1 >= y0) {
+        tft.drawFastVLine(x, y0, y1 - y0 + 1, gridColor);
+      }
+    }
+  }
+
+  for (int i = 0; i <= 10; i++) {
+    int y = graphY + (graphH * i) / 10;
+    if (y >= regionY && y <= regionBottom) {
+      int x0 = max(graphX, regionX);
+      int x1 = min(graphRight, regionRight);
+      if (x1 >= x0) {
+        tft.drawFastHLine(x0, y, x1 - x0 + 1, gridColor);
+      }
+    }
+  }
+
+  if (graphX >= regionX && graphX <= regionRight) {
+    int y0 = max(graphY, regionY);
+    int y1 = min(graphBottom, regionBottom);
+    if (y1 >= y0) { tft.drawFastVLine(graphX, y0, y1 - y0 + 1, axisColor); }
+  }
+  if (graphRight >= regionX && graphRight <= regionRight) {
+    int y0 = max(graphY, regionY);
+    int y1 = min(graphBottom, regionBottom);
+    if (y1 >= y0) { tft.drawFastVLine(graphRight, y0, y1 - y0 + 1, axisColor); }
+  }
+  if (graphY >= regionY && graphY <= regionBottom) {
+    int x0 = max(graphX, regionX);
+    int x1 = min(graphRight, regionRight);
+    if (x1 >= x0) { tft.drawFastHLine(x0, graphY, x1 - x0 + 1, axisColor); }
+  }
+  if (graphBottom >= regionY && graphBottom <= regionBottom) {
+    int x0 = max(graphX, regionX);
+    int x1 = min(graphRight, regionRight);
+    if (x1 >= x0) { tft.drawFastHLine(x0, graphBottom, x1 - x0 + 1, axisColor); }
+  }
+
+  int firstSegment = max(0, startPoint - 1);
+  int lastSegment = min(8, endPoint);
+  for (int i = firstSegment; i <= lastSegment; i++) {
+    int x1 = map(i, 0, 9, graphX, graphRight);
+    int y1 = map(linijamoci[row][i], 0, 100, graphBottom, graphY);
+    int x2 = map(i + 1, 0, 9, graphX, graphRight);
+    int y2 = map(linijamoci[row][i + 1], 0, 100, graphBottom, graphY);
+
+    x1 = constrain(x1, graphX, graphRight);
+    x2 = constrain(x2, graphX, graphRight);
+    y1 = constrain(y1, graphY, graphBottom);
+    y2 = constrain(y2, graphY, graphBottom);
+
+    drawPowerGraphThickLine(x1, y1, x2, y2, TFT_RED);
+  }
+
+  int selectedX = map(izbirnik, 0, 9, graphX, graphRight);
+  int selectedY = map(linijamoci[row][izbirnik], 0, 100, graphBottom, graphY);
+  selectedX = constrain(selectedX, graphX, graphRight);
+  selectedY = constrain(selectedY, graphY, graphBottom);
+  if (selectedX >= regionX - 6 && selectedX <= regionRight + 6 && selectedY >= regionY - 6 && selectedY <= regionBottom + 6) {
+    drawLargeCircle(selectedX, selectedY, TFT_YELLOW, 5);
   }
 }
 
@@ -4736,7 +4861,7 @@ void grafmoci() {
       y = constrain(y, graphY, graphBottom);
       y2 = constrain(y2, graphY, graphBottom);
 
-      tft.drawLine(x, y, x2, y2, TFT_RED);
+      drawPowerGraphThickLine(x, y, x2, y2, TFT_RED);
       if (izbirnik == i) { drawLargeCircle(x, y, TFT_YELLOW, 5); }
       if (i == 8 && izbirnik == 9) { drawLargeCircle(x2, y2, TFT_YELLOW, 5); }
     }
@@ -6463,8 +6588,8 @@ void tipke() {
           }
           if (napis[indup2][indup1] == "GRAF0" || napis[indup2][indup1] == "GRAF1" || napis[indup2][indup1] == "GRAF2") {
             flaggrafmoci = 1;
-            tft.pushImage(0, 0, animation_width, animation_height, SheetFan[0]);
             grafmocizrisan = 0;
+            powerGraphStaticDrawn = 0;
             flagizbirnikizbrano = 0;
           }
         }
@@ -6855,8 +6980,12 @@ void tipke() {
           flagizbranpt = 0;
         }
 
-        if (flaggrafmoci || flagsmit || flagurnik && !flagvstopizbirnik && !flagpotrjenosmit && pomikajY) {
+        if (flaggrafmoci && flagvstopizbirnik) {
+          flagvstopizbirnik = 0;
+          grafmocizrisan = 0;
+        } else if ((flaggrafmoci || flagsmit || flagurnik) && !flagvstopizbirnik && !flagpotrjenosmit && pomikajY) {
           flaggrafmoci = 0;
+          powerGraphStaticDrawn = 0;
           flagsmit = 0;
           flagurnik = 0;
           tft.pushImage(0, 0, animation_width, animation_height, pinoutcfg[0]);
@@ -6869,7 +6998,7 @@ void tipke() {
 
         flagpotrjenosmit = 0;
 
-        if (flagvstopizbirnik) {
+        if (flagvstopizbirnik && !flaggrafmoci) {
           flagvstopizbirnik = 0;
         }
 
@@ -7116,7 +7245,7 @@ void tipke() {
           } else if (linijamoci[indup2 + pristej][izbirnik] > 0) {
             linijamoci[indup2 + pristej][izbirnik] -= 2;
             ;
-            grafmocizrisan = 0;
+            redrawPowerGraphPointArea(pristej, izbirnik);
             flagzaklenivstop2 = 0;
           }
         }
@@ -7385,7 +7514,7 @@ void tipke() {
           } else if (linijamoci[indup2 + pristej][izbirnik] < 99) {
             linijamoci[indup2 + pristej][izbirnik] += 2;
             ;
-            grafmocizrisan = 0;
+            redrawPowerGraphPointArea(pristej, izbirnik);
             flagzaklenivstop3 = 0;
           }
         }
