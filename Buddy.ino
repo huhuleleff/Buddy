@@ -3479,23 +3479,27 @@ struct UrnikGridStyle {
   uint8_t cellInnerH;
 };
 
-// URNIK GRID SIZE TUNING:
-// - increase URNIK_CELL_INNER_H for taller bars
-// - increase URNIK_CELL_INNER_W for wider bars
-// - keep *_STEP values in sync so slots don't overlap too much
+// URNIK GRID SIZE TUNING (automatic follow):
+// Change only inner size values below; all dependent sizes/steps/ranges are derived.
 const uint8_t URNIK_DAY_MARKER_X = 4;
 const uint8_t URNIK_DAY_LABEL_X = 10;
 const uint8_t URNIK_COL_START_X = 30;
-const uint8_t URNIK_COL_STEP = 5;
+const uint8_t URNIK_TOP_START_Y = 0;
+
 const uint8_t URNIK_CELL_INNER_W = 4;
 const uint8_t URNIK_CELL_INNER_H = 7;
-const uint8_t URNIK_CELL_W = 6;
-const uint8_t URNIK_CELL_H = 9;
-const uint8_t URNIK_TOP_START_Y = 0;
-const uint8_t URNIK_TOP_END_Y = 55;
-const uint8_t URNIK_BOTTOM_START_Y = 71;
-const uint8_t URNIK_BOTTOM_END_Y = 121;
-const uint8_t URNIK_ROW_STEP = 8;
+const uint8_t URNIK_CELL_BORDER = 1;      // 1 px border around inner fill area
+const uint8_t URNIK_CELL_OVERLAP_X = 1;   // keep historical dense look
+const uint8_t URNIK_CELL_OVERLAP_Y = 1;
+const uint8_t URNIK_HALF_GAP_Y = 16;      // vertical distance between top and bottom halves
+
+const uint8_t URNIK_CELL_W = URNIK_CELL_INNER_W + (2 * URNIK_CELL_BORDER);
+const uint8_t URNIK_CELL_H = URNIK_CELL_INNER_H + (2 * URNIK_CELL_BORDER);
+const uint8_t URNIK_COL_STEP = URNIK_CELL_W - URNIK_CELL_OVERLAP_X;
+const uint8_t URNIK_ROW_STEP = URNIK_CELL_H - URNIK_CELL_OVERLAP_Y;
+const uint8_t URNIK_TOP_END_Y = URNIK_TOP_START_Y + (URNIK_ROW_STEP * 6);
+const uint8_t URNIK_BOTTOM_START_Y = URNIK_TOP_END_Y + URNIK_HALF_GAP_Y;
+const uint8_t URNIK_BOTTOM_END_Y = URNIK_BOTTOM_START_Y + (URNIK_ROW_STEP * 6);
 
 void drawUrnikCell(uint8_t x, uint8_t y, uint8_t value, bool selected, const UrnikGridStyle& style) {
   const uint8_t fillLevel = map(value, 0, 100, 0, style.cellInnerH - 1);
