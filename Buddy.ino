@@ -2293,15 +2293,25 @@ linijamoci[5] = { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 };
   server.on("/api/discordToken", HTTP_POST, [](AsyncWebServerRequest *request){
     if (request->hasParam("webhookUrl", true)) {
       String newWebhookUrl = request->getParam("webhookUrl", true)->value();
-      if (newWebhookUrl.length() > 0) {
-        discordWebhookUrl = newWebhookUrl;
-        if (saveStringToSPIFFS("/DISCORD_TOKEN.bin", discordWebhookUrl)) {
-          request->send(200, "application/json", "{\"success\":true,\"message\":\"Discord webhook URL saved successfully\"}");
-        } else {
-          request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to save Discord webhook URL\"}");
-        }
-      } else {
+      newWebhookUrl.trim();
+
+      if (newWebhookUrl.length() == 0) {
         request->send(400, "application/json", "{\"success\":false,\"message\":\"Discord webhook URL cannot be empty\"}");
+        return;
+      }
+
+      if (!newWebhookUrl.startsWith("https://discord.com/api/webhooks/")) {
+        request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid Discord webhook URL format\"}");
+        return;
+      }
+
+      String previousWebhookUrl = discordWebhookUrl;
+      if (saveStringToSPIFFS("/DISCORD_TOKEN.bin", newWebhookUrl)) {
+        discordWebhookUrl = newWebhookUrl;
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"Discord webhook URL saved successfully\"}");
+      } else {
+        discordWebhookUrl = previousWebhookUrl;
+        request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to save Discord webhook URL\"}");
       }
     } else {
       request->send(400, "application/json", "{\"success\":false,\"message\":\"Missing webhookUrl parameter\"}");
@@ -3744,15 +3754,28 @@ bool loadIntFromSPIFFS(const char* path, int& value) {
 }
 
 bool saveStringToSPIFFS(const char* path, const String& value) {
+  // Ensure FFat is available
+  if (!FFat.begin(true)) {
+    Serial.printf("[FS] ERROR: FFat not available for %s\n", path);
+    napaka = 2;  // ne morem shraniti
+    return false;
+  }
+
   fs::File file = FFat.open(path, FILE_WRITE);
   if (!file) {
     napaka = 2;  // ne morem shraniti
     return false;
   }
 
-  file.write((const uint8_t*)value.c_str(), value.length());
+  size_t expected = value.length();
+  size_t bytesWritten = file.write((const uint8_t*)value.c_str(), expected);
   file.flush(); // Vital: ensures data is physically moved from RAM to Flash
   file.close(); // Vital: releases the handle for the next file
+
+  if (bytesWritten != expected) {
+    Serial.printf("[FS] ERROR: saveStringToSPIFFS write mismatch for %s (expected %d, wrote %d)\n", path, expected, bytesWritten);
+    return false;
+  }
 
   return true;
 }
@@ -3772,12 +3795,16 @@ bool loadStringFromSPIFFS(const char* path, String& value) {
   }
 
   std::unique_ptr<char[]> buf(new char[size + 1]);
-  file.readBytes(buf.get(), size);
-  buf[size] = '\0';
-
-  value = String(buf.get());
-
+  size_t bytesRead = file.readBytes(buf.get(), size);
   file.close();
+
+  if (bytesRead != size) {
+    Serial.printf("[FS] ERROR: loadStringFromSPIFFS read mismatch for %s (expected %d, read %d)\n", path, size, bytesRead);
+    return false;
+  }
+
+  buf[size] = '\0';
+  value = String(buf.get());
   return true;
 }
 
