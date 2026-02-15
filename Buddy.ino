@@ -555,6 +555,7 @@ bool utripaj;
 int indeksvzorca;
 bool flaggrafmoci;
 bool grafmocizrisan;
+bool powerGraphStaticDrawn;
 unsigned char linijamoci[15][10]= {
   { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 },
   {}, {}, {}, {},
@@ -4605,18 +4606,18 @@ void drawLargeCircle(int x0, int y0, uint32_t color, int radius) {
   }
 }
 
-void drawPowerGraphBackground() {
+void drawPowerGraphPlotArea() {
   const int graphX = 36;
   const int graphY = 16;
   const int graphW = DISPLAY_WIDTH - 52;
   const int graphH = DISPLAY_HEIGHT - 44;
 
-  for (int y = 0; y < DISPLAY_HEIGHT; y++) {
-    float blend = (float)y / (DISPLAY_HEIGHT - 1);
-    uint8_t r = 28 + (uint8_t)(42 * blend);
-    uint8_t g = 28 + (uint8_t)(10 * blend);
-    uint8_t b = 32 + (uint8_t)(8 * blend);
-    tft.drawFastHLine(0, y, DISPLAY_WIDTH, tft.color565(r, g, b));
+  for (int x = graphX; x <= graphX + graphW; x++) {
+    float blend = (float)x / (DISPLAY_WIDTH - 1);
+    uint8_t r = 28 + (uint8_t)(70 * blend);
+    uint8_t g = 28 + (uint8_t)(12 * blend);
+    uint8_t b = 32 + (uint8_t)(12 * blend);
+    tft.drawFastVLine(x, graphY, graphH + 1, tft.color565(r, g, b));
   }
 
   uint16_t gridColor = tft.color565(90, 90, 95);
@@ -4633,6 +4634,23 @@ void drawPowerGraphBackground() {
   }
 
   tft.drawRect(graphX, graphY, graphW, graphH, axisColor);
+}
+
+void drawPowerGraphBackground() {
+  for (int x = 0; x < DISPLAY_WIDTH; x++) {
+    float blend = (float)x / (DISPLAY_WIDTH - 1);
+    uint8_t r = 28 + (uint8_t)(70 * blend);
+    uint8_t g = 28 + (uint8_t)(12 * blend);
+    uint8_t b = 32 + (uint8_t)(12 * blend);
+    tft.drawFastVLine(x, 0, DISPLAY_HEIGHT, tft.color565(r, g, b));
+  }
+
+  drawPowerGraphPlotArea();
+
+  const int graphX = 36;
+  const int graphY = 16;
+  const int graphW = DISPLAY_WIDTH - 52;
+  const int graphH = DISPLAY_HEIGHT - 44;
 
   tft.setTextColor(TFT_WHITE);
   tft.setTextSize(1);
@@ -4687,30 +4705,30 @@ void grafmoci() {
     const int graphRight = graphX + graphW;
     const int graphBottom = graphY + graphH;
     int x, y, x2, y2;
-    izrismreze();
+    if (!powerGraphStaticDrawn) {
+      drawPowerGraphBackground();
+      powerGraphStaticDrawn = 1;
+    } else {
+      drawPowerGraphPlotArea();
+    }
     tft.setTextColor(TFT_LIGHTGREY);
 
     unsigned char pristej;   // pristejemo k indeksu, da vemo da nastavljamo drug izhod, to je takrat ko spreminjamo naslednjo vrstico vplivnikov
-    unsigned char tipgrafa;  //tip grafa zgolj doloca ali je RH ali CO2 ipd, na podlagi tega določijo zaporedna števila oštevilčenj za navpične črte na grafu
-
     if (napis[indup2][indup1] == "GRAF0") {
       pristej = 0;
-      tipgrafa = 0;
     }
     if (napis[indup2][indup1] == "GRAF1") {
       pristej = 5;
-      tipgrafa = 1;
     }
     if (napis[indup2][indup1] == "GRAF2") {
       pristej = 10;
-      tipgrafa = 1;
     }
 
 
     for (int i = 0; i < 9; i++) {
-      x = map(merjenci[tipgrafa][i], 0, 40, graphX, graphRight);
+      x = map(i, 0, 9, graphX, graphRight);
       y = map(linijamoci[indup2 + pristej][i], 0, 100, graphBottom, graphY);  //0-100 procentov
-      x2 = map(merjenci[tipgrafa][i + 1], 0, 40, graphX, graphRight);
+      x2 = map(i + 1, 0, 9, graphX, graphRight);
       y2 = map(linijamoci[indup2 + pristej][i + 1], 0, 100, graphBottom, graphY);  //0-100 procentov
 
       x = constrain(x, graphX, graphRight);
@@ -7467,8 +7485,10 @@ void tipke() {
 
 void izrismreze() {
 
-  if (!flaggrafmoci && !flagsmit && !flagurnik) {  TJpgDec.drawFsJpg(0, 0, "/mreza.jpg", FFat); }  
-  if (flaggrafmoci) { drawPowerGraphBackground(); }
+  if (!flaggrafmoci && !flagsmit && !flagurnik) {
+    powerGraphStaticDrawn = 0;
+    TJpgDec.drawFsJpg(0, 0, "/mreza.jpg", FFat);
+  }
 }
 
 void racunaj() {
