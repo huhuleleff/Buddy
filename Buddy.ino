@@ -3481,10 +3481,15 @@ struct UrnikGridStyle {
 
 // URNIK GRID SIZE TUNING (automatic follow):
 // Change only inner size values below; all dependent sizes/steps/ranges are derived.
-const int16_t URNIK_DAY_MARKER_X = 4;
-const int16_t URNIK_DAY_LABEL_X = 10;
-const int16_t URNIK_COL_START_X = 30;
 const int16_t URNIK_TOP_START_Y = 0;
+
+// Day labels lane (keeps labels clear of bars; avoids overlap with graph).
+const int16_t URNIK_DAY_LABEL_X = 2;
+const uint8_t URNIK_DAY_LABEL_MAX_CHARS = 9;  // "ponedeljek" length
+const uint8_t URNIK_FONT1_CHAR_W = 6;
+const uint8_t URNIK_LABEL_TO_GRID_GAP_X = 3;
+const int16_t URNIK_COL_START_X = URNIK_DAY_LABEL_X + (URNIK_DAY_LABEL_MAX_CHARS * URNIK_FONT1_CHAR_W) + URNIK_LABEL_TO_GRID_GAP_X;
+const int16_t URNIK_DAY_MARKER_X = URNIK_DAY_LABEL_X - URNIK_FONT1_CHAR_W;
 
 // Position offsets for moving each graph independently (left/right/up/down).
 const int16_t URNIK_TOP_OFFSET_X = 0;
@@ -3506,6 +3511,7 @@ const uint8_t URNIK_ROW_STEP = URNIK_CELL_H - URNIK_CELL_OVERLAP_Y;
 const int16_t URNIK_TOP_END_Y = URNIK_TOP_START_Y + (URNIK_ROW_STEP * 6);
 const int16_t URNIK_BOTTOM_START_Y = URNIK_TOP_END_Y + URNIK_HALF_GAP_Y;
 const int16_t URNIK_BOTTOM_END_Y = URNIK_BOTTOM_START_Y + (URNIK_ROW_STEP * 6);
+const int16_t URNIK_INFO_TEXT_X = URNIK_DAY_LABEL_X;
 
 void drawUrnikCell(int16_t x, int16_t y, uint8_t value, bool selected, const UrnikGridStyle& style) {
   const uint8_t fillLevel = map(value, 0, 100, 0, style.cellInnerH - 1);
@@ -3626,8 +3632,13 @@ urnikizrisan = 0;
     if (urnikizbranakockaY > 6 && urnikizbranakockaX < 24) { urnikizbranakockaX = urnikizbranakockaX + 24; }
     if (urnikizbranakockaY < 7 && urnikizbranakockaX > 23) { urnikizbranakockaX = urnikizbranakockaX - 24; }
 
+    const int16_t topGraphEndY = URNIK_TOP_END_Y + URNIK_TOP_OFFSET_Y;
+    const int16_t bottomGraphStartY = URNIK_BOTTOM_START_Y + URNIK_BOTTOM_OFFSET_Y;
+    const int16_t infoBaseX = URNIK_INFO_TEXT_X + ((URNIK_TOP_OFFSET_X + URNIK_BOTTOM_OFFSET_X) / 2);
+    const int16_t infoBaseY = (topGraphEndY + bottomGraphStartY) / 2;
+
     tft.setTextColor(TFT_RED, TFT_BLUE);
-    tft.setCursor(10, 60);
+    tft.setCursor(infoBaseX, infoBaseY);
     tft.print("IZBRANO ");
     if ((urnikizbranakockaX / 2) < 10) { tft.print("0"); }
     tft.print(urnikizbranakockaX / 2);
