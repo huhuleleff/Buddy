@@ -3488,7 +3488,7 @@ const int16_t URNIK_TOP_START_Y = 0;
 
 // Day labels lane (keeps labels clear of bars; avoids overlap with graph).
 const int16_t URNIK_DAY_LABEL_X = 3;
-const uint8_t URNIK_DAY_LABEL_MAX_CHARS = 5;  // "ponedeljek" length
+const uint8_t URNIK_DAY_LABEL_MAX_CHARS = 10;  // "ponedeljek" length
 const uint8_t URNIK_FONT1_CHAR_W = 6;
 const uint8_t URNIK_LABEL_TO_GRID_GAP_X = 3;
 const int16_t URNIK_COL_START_X = URNIK_DAY_LABEL_X + (URNIK_DAY_LABEL_MAX_CHARS * URNIK_FONT1_CHAR_W) + URNIK_LABEL_TO_GRID_GAP_X;
@@ -3536,9 +3536,27 @@ uint16_t blend565(uint16_t c1, uint16_t c2, uint8_t mix255) {
 
 uint16_t getUrnikFillColor(uint8_t value) {
   const uint8_t clamped = min((uint8_t)100, value);
-  const uint16_t lowColor = tft.color565(0, 210, 120);
-  const uint16_t highColor = tft.color565(255, 80, 30);
+  const uint16_t lowColor = tft.color565(40, 255, 170);
+  const uint16_t highColor = tft.color565(255, 165, 40);
   return blend565(lowColor, highColor, map(clamped, 0, 100, 0, 255));
+}
+
+uint16_t getUrnikMainBgColor(int16_t y) {
+  const int16_t clampedY = constrain(y, 0, tft.height() - 1);
+  const uint16_t bgTop = tft.color565(10, 22, 52);
+  const uint16_t bgBottom = tft.color565(38, 108, 188);
+  return blend565(bgTop, bgBottom, map(clampedY, 0, tft.height() - 1, 0, 255));
+}
+
+void fillUrnikGradientRect(int16_t x, int16_t y, int16_t w, int16_t h) {
+  for (int16_t row = 0; row < h; row++) {
+    const uint16_t rowColor = getUrnikMainBgColor(y + row);
+    tft.drawFastHLine(x, y + row, w, rowColor);
+  }
+}
+
+void drawUrnikMainBackground() {
+  fillUrnikGradientRect(0, 0, tft.width(), tft.height());
 }
 
 void getUrnikCellGeometry(uint8_t dayIndex,
@@ -3558,23 +3576,24 @@ void getUrnikCellGeometry(uint8_t dayIndex,
   cellY = style.rowStartY + (scheduleDayIndex * style.rowStep);
 }
 
-void drawUrnikSelectionMarker(uint8_t dayIndex,
-                              uint8_t selectedDayIndex,
-                              uint8_t dayLabelOffset,
-                              const UrnikGridStyle& style) {
-  tft.setCursor(style.dayMarkerX, style.rowStartY + ((dayIndex - dayLabelOffset) * style.rowStep));
-  if (dayIndex == selectedDayIndex) {
-    tft.setTextColor(TFT_RED, TFT_BLUE);
-    tft.print(">");
-  } else {
-    tft.setTextColor(TFT_BLACK, TFT_BLUE);
-    tft.print(" ");
-  }
+void drawUrnikDayLabel(uint8_t dayIndex,
+                       uint8_t dayLabelOffset,
+                       bool selected,
+                       const UrnikGridStyle& style) {
+  const int16_t rowY = style.rowStartY + ((dayIndex - dayLabelOffset) * style.rowStep);
+  const int16_t labelW = URNIK_DAY_LABEL_MAX_CHARS * URNIK_FONT1_CHAR_W;
+  const uint16_t labelBg = selected ? tft.color565(240, 150, 35) : getUrnikMainBgColor(rowY + (style.cellH / 2));
+  const uint16_t labelFg = selected ? TFT_BLACK : TFT_WHITE;
+
+  tft.fillRect(style.dayLabelX, rowY, labelW, style.cellH, labelBg);
+  tft.setTextColor(labelFg, labelBg);
+  tft.drawString(dan[dayIndex - dayLabelOffset], style.dayLabelX, rowY, 1);
 }
 
 void drawUrnikInfoLine(int16_t infoBaseX, int16_t infoBaseY) {
-  tft.fillRect(infoBaseX, infoBaseY, URNIK_INFO_TEXT_W, URNIK_INFO_TEXT_H, TFT_BLUE);
-  tft.setTextColor(TFT_RED, TFT_BLUE);
+  fillUrnikGradientRect(infoBaseX, infoBaseY, URNIK_INFO_TEXT_W, URNIK_INFO_TEXT_H);
+  const uint16_t infoBg = getUrnikMainBgColor(infoBaseY + (URNIK_INFO_TEXT_H / 2));
+  tft.setTextColor(TFT_YELLOW, infoBg);
   tft.setCursor(infoBaseX, infoBaseY);
   tft.print("IZBRANO ");
   if ((urnikizbranakockaX / 2) < 10) { tft.print("0"); }
@@ -3644,17 +3663,7 @@ void drawUrnikHalf(uint8_t dayIndexStart,
   uint8_t localDayIndex = dayIndexStart;
 
   for (int16_t rowY = style.rowStartY; rowY <= style.rowEndY; rowY += style.rowStep) {
-    if (localDayIndex == urnikizbranakockaY) {
-      tft.setTextColor(TFT_RED, TFT_BLUE);
-      tft.setCursor(style.dayMarkerX, rowY);
-      tft.print(">");
-    } else {
-      tft.setCursor(style.dayMarkerX, rowY);
-      tft.print(" ");
-    }
-
-    tft.setTextColor(TFT_BLACK, TFT_BLUE);
-    tft.drawString(dan[localDayIndex - dayLabelOffset], style.dayLabelX, rowY, 1);
+    drawUrnikDayLabel(localDayIndex, dayLabelOffset, localDayIndex == urnikizbranakockaY, style);
 
     uint8_t localSlot = slotStart;
     for (int16_t colX = style.colStartX; colX <= style.colEndX; colX += style.colStep) {
@@ -3688,7 +3697,7 @@ urnikizrisan = 0;
     kolikocasapritisnjena++;
      kolikocasapritisnjena3++;
      if (kolikocasapritisnjena3 > 2) {
-    if (kolikocasapritisnjena > 10) { povecujza = 4; }
+    if (kolikocasapritisnjena > 24) { povecujza = 2; }
     if (urnikizbranakockaY > 6) {
       casovnirazpored[urnikizbranakockaY - 7][urnikizbranakockaX] += povecujza;
       napolnilza =casovnirazpored[urnikizbranakockaY - 7][urnikizbranakockaX];
@@ -3773,12 +3782,15 @@ urnikizrisan = 0;
       drawUrnikHalf(0, 0, 0, 23, topHalfStyle);
       drawUrnikHalf(7, 7, 24, 47, lowerHalfStyle);
     } else {
-      int16_t prevX = 0;
-      int16_t prevY = 0;
-      uint8_t prevDay = 0;
-      getUrnikCellGeometry(urnikLastSelectedY, urnikLastSelectedX, topHalfStyle, lowerHalfStyle, prevX, prevY, prevDay);
-      drawUrnikCell(prevX, prevY, casovnirazpored[prevDay][urnikLastSelectedX], false,
-                    (urnikLastSelectedY > 6) ? lowerHalfStyle : topHalfStyle);
+      const bool sameSelection = (urnikLastSelectedY == urnikizbranakockaY && urnikLastSelectedX == urnikizbranakockaX);
+      if (!sameSelection) {
+        int16_t prevX = 0;
+        int16_t prevY = 0;
+        uint8_t prevDay = 0;
+        getUrnikCellGeometry(urnikLastSelectedY, urnikLastSelectedX, topHalfStyle, lowerHalfStyle, prevX, prevY, prevDay);
+        drawUrnikCell(prevX, prevY, casovnirazpored[prevDay][urnikLastSelectedX], false,
+                      (urnikLastSelectedY > 6) ? lowerHalfStyle : topHalfStyle);
+      }
 
       int16_t currX = 0;
       int16_t currY = 0;
@@ -3789,19 +3801,21 @@ urnikizrisan = 0;
 
       if (urnikLastSelectedY != urnikizbranakockaY) {
         if (urnikLastSelectedY > 6) {
-          drawUrnikSelectionMarker(urnikLastSelectedY, urnikizbranakockaY, 7, lowerHalfStyle);
+          drawUrnikDayLabel(urnikLastSelectedY, 7, false, lowerHalfStyle);
         } else {
-          drawUrnikSelectionMarker(urnikLastSelectedY, urnikizbranakockaY, 0, topHalfStyle);
+          drawUrnikDayLabel(urnikLastSelectedY, 0, false, topHalfStyle);
         }
 
         if (urnikizbranakockaY > 6) {
-          drawUrnikSelectionMarker(urnikizbranakockaY, urnikizbranakockaY, 7, lowerHalfStyle);
+          drawUrnikDayLabel(urnikizbranakockaY, 7, true, lowerHalfStyle);
         } else {
-          drawUrnikSelectionMarker(urnikizbranakockaY, urnikizbranakockaY, 0, topHalfStyle);
+          drawUrnikDayLabel(urnikizbranakockaY, 0, true, topHalfStyle);
         }
       }
 
-      drawUrnikInfoLine(infoBaseX, infoBaseY);
+      if (!sameSelection) {
+        drawUrnikInfoLine(infoBaseX, infoBaseY);
+      }
     }
 
     urnikLastSelectedX = urnikizbranakockaX;
@@ -6338,7 +6352,7 @@ void tipke() {
             flagizbirnikizbrano = 0;
             urnikizrisan = 0;
 
-            tft.fillScreen(TFT_BLUE);
+            drawUrnikMainBackground();
           }
         }
 
