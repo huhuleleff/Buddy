@@ -3479,6 +3479,21 @@ struct UrnikGridStyle {
   uint8_t cellInnerH;
 };
 
+uint16_t blend565(uint16_t c1, uint16_t c2, uint8_t amount) {
+  const uint8_t r1 = (c1 >> 11) & 0x1F;
+  const uint8_t g1 = (c1 >> 5) & 0x3F;
+  const uint8_t b1 = c1 & 0x1F;
+  const uint8_t r2 = (c2 >> 11) & 0x1F;
+  const uint8_t g2 = (c2 >> 5) & 0x3F;
+  const uint8_t b2 = c2 & 0x1F;
+
+  const uint8_t r = ((r1 * (255 - amount)) + (r2 * amount)) / 255;
+  const uint8_t g = ((g1 * (255 - amount)) + (g2 * amount)) / 255;
+  const uint8_t b = ((b1 * (255 - amount)) + (b2 * amount)) / 255;
+
+  return (r << 11) | (g << 5) | b;
+}
+
 // URNIK GRID SIZE TUNING (automatic follow):
 // Change only inner size values below; all dependent sizes/steps/ranges are derived.
 const int16_t URNIK_TOP_START_Y = 0;
@@ -3513,32 +3528,57 @@ const int16_t URNIK_BOTTOM_START_Y = URNIK_TOP_END_Y + URNIK_HALF_GAP_Y;
 const int16_t URNIK_BOTTOM_END_Y = URNIK_BOTTOM_START_Y + (URNIK_ROW_STEP * 6);
 const int16_t URNIK_INFO_TEXT_X = URNIK_DAY_LABEL_X;
 
+void drawUrnikBackground(const UrnikGridStyle& style, bool topHalf) {
+  const int16_t bgStartY = style.rowStartY - 2;
+  const int16_t bgHeight = (style.rowEndY - style.rowStartY) + style.cellH + 4;
+  const int16_t bgStartX = 0;
+  const int16_t bgEndX = tft.width() - 1;
+  const int16_t bgWidth = tft.width();
+  const uint16_t startColor = topHalf ? TFT_NAVY : TFT_DARKGREEN;
+  const uint16_t endColor = topHalf ? TFT_BLUE : TFT_GREEN;
+
+  for (int16_t i = 0; i < bgHeight; i++) {
+    const uint8_t amount = map(i, 0, bgHeight - 1, 0, 255);
+    const uint16_t rowColor = blend565(startColor, endColor, amount);
+    tft.drawFastHLine(bgStartX, bgStartY + i, bgWidth, rowColor);
+  }
+
+  tft.drawRect(bgStartX, bgStartY, bgEndX + 1, bgHeight, TFT_DARKGREY);
+}
+
 void drawUrnikCell(int16_t x, int16_t y, uint8_t value, bool selected, const UrnikGridStyle& style) {
   const uint8_t fillLevel = map(value, 0, 100, 0, style.cellInnerH - 1);
   const int16_t innerStartX = x + 1;
   const int16_t innerEndX = x + style.cellInnerW;
   const int16_t innerBottomY = y + style.cellInnerH;
+  const uint16_t borderColor = selected ? TFT_YELLOW : TFT_DARKGREY;
+  const uint16_t emptyColor = blend565(TFT_BLACK, TFT_NAVY, 120);
+  const uint16_t lowPowerColor = blend565(TFT_GREEN, TFT_YELLOW, 60);
+  const uint16_t highPowerColor = blend565(TFT_ORANGE, TFT_RED, 160);
 
-  tft.drawRect(x, y, style.cellW, style.cellH, TFT_RED);
+  tft.fillRect(x, y, style.cellW, style.cellH, emptyColor);
+  tft.drawRect(x, y, style.cellW, style.cellH, borderColor);
 
   for (int i = style.cellInnerH - 1; i >= fillLevel; i--) {
-    tft.drawLine(innerStartX, innerBottomY - i, innerEndX, innerBottomY - i, TFT_BLUE);
+    tft.drawLine(innerStartX, innerBottomY - i, innerEndX, innerBottomY - i, emptyColor);
   }
 
   if (value != 0) {
     for (int i = 0; i <= fillLevel; i++) {
-      tft.drawLine(innerStartX, innerBottomY - i, innerEndX, innerBottomY - i, TFT_GREEN);
+      const uint8_t amount = map(i, 0, style.cellInnerH - 1, 0, 255);
+      const uint16_t powerColor = blend565(lowPowerColor, highPowerColor, amount);
+      tft.drawLine(innerStartX, innerBottomY - i, innerEndX, innerBottomY - i, powerColor);
     }
 
     if (value > 0) {
-      tft.drawLine(innerStartX, innerBottomY, innerEndX, innerBottomY, TFT_GREEN);
+      tft.drawLine(innerStartX, innerBottomY, innerEndX, innerBottomY, highPowerColor);
     }
   } else {
-    tft.fillRect(x + 1, y + 1, style.cellInnerW, style.cellInnerH, TFT_BLUE);
+    tft.fillRect(x + 1, y + 1, style.cellInnerW, style.cellInnerH, emptyColor);
   }
 
   if (selected) {
-    tft.drawRect(x + 1, y + 1, style.cellInnerW, style.cellInnerH, TFT_ORANGE);
+    tft.drawRect(x + 1, y + 1, style.cellInnerW, style.cellInnerH, TFT_WHITE);
   }
 }
 
@@ -3559,7 +3599,7 @@ void drawUrnikHalf(uint8_t dayIndexStart,
       tft.print(" ");
     }
 
-    tft.setTextColor(TFT_BLACK, TFT_BLUE);
+    tft.setTextColor(TFT_WHITE);
     tft.drawString(dan[localDayIndex - dayLabelOffset], style.dayLabelX, rowY, 1);
 
     uint8_t localSlot = slotStart;
@@ -3637,7 +3677,7 @@ urnikizrisan = 0;
     const int16_t infoBaseX = URNIK_INFO_TEXT_X + ((URNIK_TOP_OFFSET_X + URNIK_BOTTOM_OFFSET_X) / 2);
     const int16_t infoBaseY = (topGraphEndY + bottomGraphStartY) / 2;
 
-    tft.setTextColor(TFT_RED, TFT_BLUE);
+    tft.setTextColor(TFT_CYAN);
     tft.setCursor(infoBaseX, infoBaseY);
     tft.print("IZBRANO ");
     if ((urnikizbranakockaX / 2) < 10) { tft.print("0"); }
@@ -3679,6 +3719,8 @@ urnikizrisan = 0;
       URNIK_CELL_INNER_H
     };
 
+    drawUrnikBackground(topHalfStyle, true);
+
     drawUrnikHalf(0, 0, 0, 23, topHalfStyle);
 
     const int16_t bottomColStartX = URNIK_COL_START_X + URNIK_BOTTOM_OFFSET_X;
@@ -3697,6 +3739,7 @@ urnikizrisan = 0;
       URNIK_CELL_INNER_W,
       URNIK_CELL_INNER_H
     };
+    drawUrnikBackground(lowerHalfStyle, false);
     drawUrnikHalf(7, 7, 24, 47, lowerHalfStyle);
   }
 }
