@@ -3518,6 +3518,12 @@ const int16_t URNIK_INFO_TEXT_X = URNIK_DAY_LABEL_X;
 const int16_t URNIK_INFO_TEXT_W = 220;
 const int16_t URNIK_INFO_TEXT_H = 10;
 
+// URNIK fill-speed tuning (single place for quick adjustment)
+const uint8_t URNIK_FILL_REPEAT_DIVIDER = 15;       // baseline update cadence (higher = slower)
+const uint16_t URNIK_FILL_ACCEL_HOLD_TICKS = 120;   // hold time before acceleration starts
+const uint8_t URNIK_FILL_ACCEL_STEP = 2;            // increment step while accelerated
+const uint8_t URNIK_FILL_MAX_PAUSE_TICKS = 35;      // pause duration at 100 before wrap to 0
+
 uint16_t blend565(uint16_t c1, uint16_t c2, uint8_t mix255) {
   const uint8_t inv = 255 - mix255;
   const uint8_t r1 = (c1 >> 11) & 0x1F;
@@ -3582,10 +3588,14 @@ void drawUrnikDayLabel(uint8_t dayIndex,
                        const UrnikGridStyle& style) {
   const int16_t rowY = style.rowStartY + ((dayIndex - dayLabelOffset) * style.rowStep);
   const int16_t labelW = URNIK_DAY_LABEL_MAX_CHARS * URNIK_FONT1_CHAR_W;
-  const uint16_t labelBg = selected ? tft.color565(240, 150, 35) : getUrnikMainBgColor(rowY + (style.cellH / 2));
-  const uint16_t labelFg = selected ? TFT_BLACK : TFT_WHITE;
+  const uint16_t baseBg = getUrnikMainBgColor(rowY + (style.cellH / 2));
+  const uint16_t labelBg = selected ? blend565(baseBg, tft.color565(130, 175, 235), 120) : baseBg;
+  const uint16_t labelFg = selected ? TFT_WHITE : tft.color565(210, 230, 255);
 
   tft.fillRect(style.dayLabelX, rowY, labelW, style.cellH, labelBg);
+  if (selected) {
+    tft.drawRect(style.dayLabelX, rowY, labelW, style.cellH, tft.color565(235, 245, 255));
+  }
   tft.setTextColor(labelFg, labelBg);
   tft.drawString(dan[dayIndex - dayLabelOffset], style.dayLabelX, rowY, 1);
 }
@@ -3616,6 +3626,18 @@ void drawUrnikInfoLine(int16_t infoBaseX, int16_t infoBaseY) {
   }
 
   tft.print("(");
+}
+
+void drawUrnikInfoPercentage(int16_t infoBaseX, int16_t infoBaseY) {
+  const uint8_t URNIK_INFO_VALUE_OFFSET_CHARS = 21;
+  const uint8_t URNIK_INFO_VALUE_CHARS = 6;
+  const int16_t valueX = infoBaseX + (URNIK_INFO_VALUE_OFFSET_CHARS * URNIK_FONT1_CHAR_W);
+
+  fillUrnikGradientRect(valueX, infoBaseY, URNIK_INFO_VALUE_CHARS * URNIK_FONT1_CHAR_W, URNIK_INFO_TEXT_H);
+
+  const uint16_t infoBg = getUrnikMainBgColor(infoBaseY + (URNIK_INFO_TEXT_H / 2));
+  tft.setTextColor(TFT_YELLOW, infoBg);
+  tft.setCursor(valueX, infoBaseY);
   if (urnikizbranakockaY > 6) {
     tft.print(casovnirazpored[urnikizbranakockaY - 7][urnikizbranakockaX]);
   } else {
@@ -3629,8 +3651,8 @@ void drawUrnikCell(int16_t x, int16_t y, uint8_t value, bool selected, const Urn
   const int16_t innerStartX = x + 1;
   const int16_t innerEndX = x + style.cellInnerW;
   const int16_t innerBottomY = y + style.cellInnerH;
-  const uint16_t gradientTop = tft.color565(8, 18, 45);
-  const uint16_t gradientBottom = tft.color565(40, 105, 180);
+  const uint16_t gradientTop = tft.color565(16, 30, 58);
+  const uint16_t gradientBottom = tft.color565(24, 46, 78);
   const uint16_t fillColor = getUrnikFillColor(value);
 
   tft.drawRect(x, y, style.cellW, style.cellH, tft.color565(180, 80, 60));
@@ -3696,15 +3718,16 @@ urnikizrisan = 0;
 
     kolikocasapritisnjena++;
      kolikocasapritisnjena3++;
-     if (kolikocasapritisnjena3 > 2) {
-    if (kolikocasapritisnjena > 24) { povecujza = 2; }
+     if (kolikocasapritisnjena3 >= URNIK_FILL_REPEAT_DIVIDER) {
+    kolikocasapritisnjena3 = 0;
+    if (kolikocasapritisnjena > URNIK_FILL_ACCEL_HOLD_TICKS) { povecujza = URNIK_FILL_ACCEL_STEP; }
     if (urnikizbranakockaY > 6) {
       casovnirazpored[urnikizbranakockaY - 7][urnikizbranakockaX] += povecujza;
       napolnilza =casovnirazpored[urnikizbranakockaY - 7][urnikizbranakockaX];
       if (casovnirazpored[urnikizbranakockaY - 7][urnikizbranakockaX] > 100) {
         casovnirazpored[urnikizbranakockaY - 7][urnikizbranakockaX] = 100;
         kolikocasapritisnjena2++;
-        if (kolikocasapritisnjena2 > 7) {
+        if (kolikocasapritisnjena2 > URNIK_FILL_MAX_PAUSE_TICKS) {
           kolikocasapritisnjena2 = 0;
           casovnirazpored[urnikizbranakockaY - 7][urnikizbranakockaX] = 0;
         }
@@ -3716,7 +3739,7 @@ urnikizrisan = 0;
       if (casovnirazpored[urnikizbranakockaY][urnikizbranakockaX] > 100) {
         casovnirazpored[urnikizbranakockaY][urnikizbranakockaX] = 100;
        kolikocasapritisnjena2++;
-        if (kolikocasapritisnjena2 > 7) {
+        if (kolikocasapritisnjena2 > URNIK_FILL_MAX_PAUSE_TICKS) {
           kolikocasapritisnjena2 = 0;
           casovnirazpored[urnikizbranakockaY][urnikizbranakockaX] = 0;
         }
@@ -3779,6 +3802,7 @@ urnikizrisan = 0;
 
     if (!urnikCacheValid) {
       drawUrnikInfoLine(infoBaseX, infoBaseY);
+      drawUrnikInfoPercentage(infoBaseX, infoBaseY);
       drawUrnikHalf(0, 0, 0, 23, topHalfStyle);
       drawUrnikHalf(7, 7, 24, 47, lowerHalfStyle);
     } else {
@@ -3815,6 +3839,9 @@ urnikizrisan = 0;
 
       if (!sameSelection) {
         drawUrnikInfoLine(infoBaseX, infoBaseY);
+        drawUrnikInfoPercentage(infoBaseX, infoBaseY);
+      } else if (flipizborurnik) {
+        drawUrnikInfoPercentage(infoBaseX, infoBaseY);
       }
     }
 
