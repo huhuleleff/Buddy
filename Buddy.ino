@@ -3598,7 +3598,7 @@ void drawUrnikDayLabel(uint8_t dayIndex,
     tft.drawRect(style.dayLabelX, rowY, labelW, style.cellH, tft.color565(235, 245, 255));
   }
   tft.setTextColor(labelFg, labelBg);
-  tft.drawString(dan[dayIndex - dayLabelOffset], style.dayLabelX, rowY, 1);
+  tft.drawString(dan[dayIndex - dayLabelOffset], style.dayLabelX, rowY + 3, 1);
 }
 
 void drawUrnikInfoLine(int16_t infoBaseX, int16_t infoBaseY) {
