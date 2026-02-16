@@ -556,6 +556,9 @@ int indeksvzorca;
 bool flaggrafmoci;
 bool grafmocizrisan;
 bool powerGraphStaticDrawn;
+// Graph redraw scratch variables kept global to avoid scope-related build issues.
+int minX, maxX, minY, maxY;
+int firstSegment, lastSegment;
 unsigned char linijamoci[15][10]= {
   { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 },
   {}, {}, {}, {},
@@ -4859,8 +4862,8 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
   }
 
   int safePointIndex = constrain(pointIndex, 0, 9);
-  int firstSegment = max(0, safePointIndex - 2);
-  int lastSegment = min(8, safePointIndex + 1);
+  firstSegment = max(0, safePointIndex - 2);
+  lastSegment = min(8, safePointIndex + 1);
   int pointX = map(safePointIndex, 0, 9, graphX, graphRight);
 
   int regionX = constrain(pointX - (2 * gridSpan), graphX + 1, graphRight - 1);
