@@ -588,9 +588,9 @@ int rele2;
 int maksimum;
 signed char* potenciometeri;
 unsigned char merjenci[3][10]= {
-  { 10, 13, 16, 19, 22, 25, 28, 31, 34, 37 },
-  { 10, 20, 30, 40, 50, 60, 70, 80, 90, 99 },
-  { 10, 20, 16, 19, 22, 25, 28, 31, 34, 37 }
+  { 0, 4, 8, 12, 16, 20, 24, 28, 32, 40 },
+  { 0, 4, 8, 12, 16, 20, 24, 28, 32, 40 },
+  { 0, 4, 8, 12, 16, 20, 24, 28, 32, 40 }
 };
 bool flagsmit;
 uint8_t schmitttemp_l[20];
@@ -1458,9 +1458,9 @@ napis[3] = { tekstnapis[0], tekstnapis[1], tekstnapis[6], tekstnapis[7], tekstna
 napis[4] = { tekstnapis[0], tekstnapis[1], tekstnapis[6], tekstnapis[7], tekstnapis[8] };
 
 
-merjenci[0] = { 10, 13, 16, 19, 22, 25, 28, 31, 34, 37 };
-merjenci[1] = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 99 };
-merjenci[2] = { 10, 20, 16, 19, 22, 25, 28, 31, 34, 37 };
+merjenci[0] = { 0, 4, 8, 12, 16, 20, 24, 28, 32, 40 };
+merjenci[1] = { 0, 4, 8, 12, 16, 20, 24, 28, 32, 40 };
+merjenci[2] = { 0, 4, 8, 12, 16, 20, 24, 28, 32, 40 };
 
 
 linijamoci[0] = { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 };
@@ -4575,33 +4575,45 @@ void grafmoci() {
     }
 
 
+    const int graphXMin = 16;
+    const int graphXMax = 152;
+    const int graphYMin = 5;
+    const int graphYMax = 115;
+
     for (int i = 0; i < 9; i++) {
-      x = map(merjenci[tipgrafa][i], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
-      y = map(linijamoci[indup2 + pristej][i], 0, 100, 115, 5);  //0-100 procentov
-      x2 = map(merjenci[tipgrafa][i + 1], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
-      y2 = map(linijamoci[indup2 + pristej][i + 1], 0, 100, 115, 5);  //0-100 procentov
+      x = map(merjenci[tipgrafa][i], 0, 40, graphXMin, graphXMax);
+      y = map(linijamoci[indup2 + pristej][i], 0, 100, graphYMax, graphYMin);  // 0-100 procentov
+      x2 = map(merjenci[tipgrafa][i + 1], 0, 40, graphXMin, graphXMax);
+      y2 = map(linijamoci[indup2 + pristej][i + 1], 0, 100, graphYMax, graphYMin);  // 0-100 procentov
       tft.drawLine(x, y, x2, y2, TFT_RED);
+      tft.drawLine(x, y + 1, x2, y2 + 1, TFT_RED);  // 1px debelejsa linija
       if (izbirnik == i) { drawLargeCircle(x, y, TFT_YELLOW, 5); }
       if (i == 8 && izbirnik == 9) { drawLargeCircle(x2, y2, TFT_YELLOW, 5); }
-      x = map(merjenci[tipgrafa][i], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
-      tft.setCursor(x, 120);
-      tft.print(merjenci[tipgrafa][i]);
+
+      x = map(merjenci[tipgrafa][i], 0, 40, graphXMin, graphXMax);
+      int label = merjenci[tipgrafa][i];
+      int xOffset = (label < 10) ? 2 : 5;
+      tft.setCursor(x - xOffset, 120);
+      tft.print(label);
+
       if (i == 8) {
-        x = map(merjenci[tipgrafa][9], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
-        tft.print(merjenci[tipgrafa][9]);
+        int xLast = map(merjenci[tipgrafa][9], 0, 40, graphXMin, graphXMax);
+        int lastLabel = merjenci[tipgrafa][9];
+        int lastXOffset = (lastLabel < 10) ? 2 : 5;
+        tft.setCursor(xLast - lastXOffset, 120);
+        tft.print(lastLabel);
       }
     }
 
 
-    for (int i = 0; i <= 90; i += 20) {
-      int y = map(i, 0, 100, 120, 12);
+    for (int i = 0; i <= 100; i += 20) {
+      int y = map(i, 0, 100, graphYMax, graphYMin);
       tft.setTextSize(1);
       tft.setTextColor(TFT_WHITE);
-      tft.setCursor(2, y - 10);
+      tft.setCursor(1, y - 3);
       tft.print(i);
+      tft.print("%");
     }
-    tft.setCursor(2, 3);
-    tft.print("99%");
   }
 }
 
@@ -8585,4 +8597,3 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
       file = root.openNextFile();
    }
 }
-
