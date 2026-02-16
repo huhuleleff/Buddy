@@ -4792,6 +4792,58 @@ void drawPowerGraphSmoothCurveRange(int row, int startSegment, int endSegment, i
   }
 }
 
+void extendPowerGraphSegmentBounds(int row, int seg, int graphX, int graphRight, int graphY, int graphBottom, int &minX, int &maxX, int &minY, int &maxY) {
+  int p0 = max(0, seg - 1);
+  int p1 = seg;
+  int p2 = seg + 1;
+  int p3 = min(9, seg + 2);
+
+  int x0 = map(p0, 0, 9, graphX, graphRight);
+  int x1 = map(p1, 0, 9, graphX, graphRight);
+  int x2 = map(p2, 0, 9, graphX, graphRight);
+  int x3 = map(p3, 0, 9, graphX, graphRight);
+
+  int y0 = getPowerGraphPointY(row, p0, graphY, graphBottom);
+  int y1 = getPowerGraphPointY(row, p1, graphY, graphBottom);
+  int y2 = getPowerGraphPointY(row, p2, graphY, graphBottom);
+  int y3 = getPowerGraphPointY(row, p3, graphY, graphBottom);
+
+  bool smoothSegment = isPowerGraphTurningPoint(row, p1) || isPowerGraphTurningPoint(row, p2);
+
+  if (!smoothSegment) {
+    minX = min(minX, min(x1, x2));
+    maxX = max(maxX, max(x1, x2));
+    minY = min(minY, min(y1, y2));
+    maxY = max(maxY, max(y1, y2));
+    return;
+  }
+
+  const int samplesPerSegment = 8;
+  for (int step = 0; step <= samplesPerSegment; step++) {
+    float t = (float)step / (float)samplesPerSegment;
+    float tt = t * t;
+    float ttt = tt * t;
+
+    float currX = 0.5f * ((2.0f * x1)
+      + (-x0 + x2) * t
+      + (2.0f * x0 - 5.0f * x1 + 4.0f * x2 - x3) * tt
+      + (-x0 + 3.0f * x1 - 3.0f * x2 + x3) * ttt);
+
+    float currY = 0.5f * ((2.0f * y1)
+      + (-y0 + y2) * t
+      + (2.0f * y0 - 5.0f * y1 + 4.0f * y2 - y3) * tt
+      + (-y0 + 3.0f * y1 - 3.0f * y2 + y3) * ttt);
+
+    int drawX = constrain((int)roundf(currX), graphX, graphRight);
+    int drawY = constrain((int)roundf(currY), graphY, graphBottom);
+
+    minX = min(minX, drawX);
+    maxX = max(maxX, drawX);
+    minY = min(minY, drawY);
+    maxY = max(maxY, drawY);
+  }
+}
+
 void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int selectedIndex) {
   const int graphX = 36;
   const int graphY = 16;
@@ -4818,8 +4870,13 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
     return;
   }
 
-  for (int x = regionX; x <= regionRight; x++) {
-    tft.drawFastVLine(x, regionY, regionBottom - regionY + 1, getPowerGraphGradientColor(x));
+  if (selectedIndex >= firstSegment && selectedIndex <= lastSegment + 1) {
+    int selectedX = map(selectedIndex, 0, 9, graphX, graphRight);
+    int selectedY = getPowerGraphPointY(row, selectedIndex, graphY, graphBottom);
+    minX = min(minX, selectedX - markerRadius);
+    maxX = max(maxX, selectedX + markerRadius);
+    minY = min(minY, selectedY - markerRadius);
+    maxY = max(maxY, selectedY + markerRadius);
   }
 
   uint16_t gridColor = tft.color565(90, 90, 95);
