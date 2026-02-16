@@ -4853,8 +4853,13 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
   const int graphBottom = graphY + graphH;
   const int row = indup2 + pristej;
 
-  const int gridSpan = max(1, graphW / 10);
-  int pointX = map(pointIndex, 0, 9, graphX, graphRight);
+  int gridSpan = graphW / 10;
+  if (gridSpan < 1) {
+    gridSpan = 1;
+  }
+
+  int safePointIndex = constrain(pointIndex, 0, 9);
+  int pointX = map(safePointIndex, 0, 9, graphX, graphRight);
 
   int regionX = constrain(pointX - (2 * gridSpan), graphX + 1, graphRight - 1);
   int regionRight = constrain(pointX + (2 * gridSpan), graphX + 1, graphRight - 1);
@@ -4864,11 +4869,6 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
   if (regionRight < regionX || regionBottom < regionY) {
     return;
   }
-
-  minX -= strokePadding;
-  maxX += strokePadding;
-  minY -= strokePadding;
-  maxY += strokePadding;
 
   if (selectedIndex >= firstSegment && selectedIndex <= lastSegment + 1) {
     int selectedX = map(selectedIndex, 0, 9, graphX, graphRight);
@@ -4894,8 +4894,8 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
     }
   }
 
-  int firstSegment = max(0, pointIndex - 2);
-  int lastSegment = min(8, pointIndex + 1);
+  int firstSegment = max(0, safePointIndex - 2);
+  int lastSegment = min(8, safePointIndex + 1);
   drawPowerGraphSmoothCurveRange(row, firstSegment, lastSegment, graphX, graphRight, graphY, graphBottom, TFT_RED);
 
   if (selectedIndex >= 0 && selectedIndex <= 9) {
