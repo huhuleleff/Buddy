@@ -2892,17 +2892,7 @@ void loop() {
     prikaziVlagazemlje();
   }
   dolocimocssr();
-  if (flaggrafmoci) {
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setCursor(30, 10);
-    tft.print("Temp:");
-    tft.print(temperatura);
-    tft.print("C ");
-    tft.setCursor(30, 20);
-    tft.print("Moc Vent:");
-    tft.print(procenti[0]);
-    tft.print("% ");
-  }
+  // Graph mode textual temp/power overlay removed on purpose.
 
   // Check soil moisture levels for all discovered sensors and send alerts if needed
   for (int i = 0; i < discovered_nodes && i < MAX_SOIL_SENSORS; i++) {
@@ -4665,10 +4655,14 @@ void drawPowerGraphBackground() {
 
   for (int tempC = 0; tempC <= 40; tempC += 4) {
     int x = map(tempC, 0, 40, graphX, graphX + graphW);
-    tft.setCursor(x - (tempC >= 10 ? 6 : 3), graphY + graphH + 9);
+    int labelOffset = (tempC >= 10 ? 6 : 3);
+    if (tempC == 40) {
+      labelOffset = 11;
+    }
+    tft.setCursor(x - labelOffset, graphY + graphH + 11);
     tft.print(tempC);
   }
-  tft.setCursor(graphX + graphW - 4, graphY + graphH + 19);
+  tft.setCursor(graphX + graphW - 14, graphY + graphH + 11);
   tft.print("C");
 
   for (int power = 0; power <= 100; power += 10) {
@@ -4676,7 +4670,7 @@ void drawPowerGraphBackground() {
     tft.setCursor(2, y - 3);
     tft.print(power);
   }
-  tft.setCursor(2, graphY - 10);
+  tft.setCursor(26, graphY - 3);
   tft.print("%");
 }
 
@@ -4705,7 +4699,30 @@ void dolocimocssr() {
 
 void drawPowerGraphThickLine(int x1, int y1, int x2, int y2, uint16_t color) {
   tft.drawLine(x1, y1, x2, y2, color);
-  tft.drawLine(x1, y1 + 1, x2, y2 + 1, color);
+  tft.drawLine(x1, y1 - 1, x2, y2 - 1, color);
+}
+
+bool isPowerGraphTurningPoint(int row, int pointIndex) {
+  if (pointIndex <= 0 || pointIndex >= 9) {
+    return false;
+  }
+
+  int prev = linijamoci[row][pointIndex - 1];
+  int curr = linijamoci[row][pointIndex];
+  int next = linijamoci[row][pointIndex + 1];
+
+  int d1 = curr - prev;
+  int d2 = next - curr;
+
+  if ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) {
+    return true;
+  }
+
+  if (abs(d1 - d2) >= 18) {
+    return true;
+  }
+
+  return false;
 }
 
 int getPowerGraphPointY(int row, int pointIndex, int graphY, int graphBottom) {
@@ -4738,6 +4755,13 @@ void drawPowerGraphSmoothCurveRange(int row, int startSegment, int endSegment, i
     int y2 = getPowerGraphPointY(row, p2, graphY, graphBottom);
     int y3 = getPowerGraphPointY(row, p3, graphY, graphBottom);
 
+    bool smoothSegment = isPowerGraphTurningPoint(row, p1) || isPowerGraphTurningPoint(row, p2);
+
+    if (!smoothSegment) {
+      drawPowerGraphThickLine(x1, y1, x2, y2, color);
+      continue;
+    }
+
     float prevX = (float)x1;
     float prevY = (float)y1;
 
@@ -4768,6 +4792,58 @@ void drawPowerGraphSmoothCurveRange(int row, int startSegment, int endSegment, i
   }
 }
 
+void extendPowerGraphSegmentBounds(int row, int seg, int graphX, int graphRight, int graphY, int graphBottom, int &minX, int &maxX, int &minY, int &maxY) {
+  int p0 = max(0, seg - 1);
+  int p1 = seg;
+  int p2 = seg + 1;
+  int p3 = min(9, seg + 2);
+
+  int x0 = map(p0, 0, 9, graphX, graphRight);
+  int x1 = map(p1, 0, 9, graphX, graphRight);
+  int x2 = map(p2, 0, 9, graphX, graphRight);
+  int x3 = map(p3, 0, 9, graphX, graphRight);
+
+  int y0 = getPowerGraphPointY(row, p0, graphY, graphBottom);
+  int y1 = getPowerGraphPointY(row, p1, graphY, graphBottom);
+  int y2 = getPowerGraphPointY(row, p2, graphY, graphBottom);
+  int y3 = getPowerGraphPointY(row, p3, graphY, graphBottom);
+
+  bool smoothSegment = isPowerGraphTurningPoint(row, p1) || isPowerGraphTurningPoint(row, p2);
+
+  if (!smoothSegment) {
+    minX = min(minX, min(x1, x2));
+    maxX = max(maxX, max(x1, x2));
+    minY = min(minY, min(y1, y2));
+    maxY = max(maxY, max(y1, y2));
+    return;
+  }
+
+  const int samplesPerSegment = 8;
+  for (int step = 0; step <= samplesPerSegment; step++) {
+    float t = (float)step / (float)samplesPerSegment;
+    float tt = t * t;
+    float ttt = tt * t;
+
+    float currX = 0.5f * ((2.0f * x1)
+      + (-x0 + x2) * t
+      + (2.0f * x0 - 5.0f * x1 + 4.0f * x2 - x3) * tt
+      + (-x0 + 3.0f * x1 - 3.0f * x2 + x3) * ttt);
+
+    float currY = 0.5f * ((2.0f * y1)
+      + (-y0 + y2) * t
+      + (2.0f * y0 - 5.0f * y1 + 4.0f * y2 - y3) * tt
+      + (-y0 + 3.0f * y1 - 3.0f * y2 + y3) * ttt);
+
+    int drawX = constrain((int)roundf(currX), graphX, graphRight);
+    int drawY = constrain((int)roundf(currY), graphY, graphBottom);
+
+    minX = min(minX, drawX);
+    maxX = max(maxX, drawX);
+    minY = min(minY, drawY);
+    maxY = max(maxY, drawY);
+  }
+}
+
 void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int selectedIndex) {
   const int graphX = 36;
   const int graphY = 16;
@@ -4777,85 +4853,112 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
   const int graphBottom = graphY + graphH;
   const int row = indup2 + pristej;
 
-  int startPoint = max(0, pointIndex - 1);
-  int endPoint = min(9, pointIndex + 1);
+  int firstSegment = max(0, pointIndex - 2);
+  int lastSegment = min(8, pointIndex + 1);
 
   int minX = graphRight;
   int maxX = graphX;
   int minY = graphBottom;
   int maxY = graphY;
 
-  for (int i = startPoint; i <= endPoint; i++) {
-    int px = map(i, 0, 9, graphX, graphRight);
-    int py = map(linijamoci[row][i], 0, 100, graphBottom, graphY);
-    px = constrain(px, graphX, graphRight);
-    py = constrain(py, graphY, graphBottom);
-    minX = min(minX, px);
-    maxX = max(maxX, px);
-    minY = min(minY, py);
-    maxY = max(maxY, py);
+  for (int seg = firstSegment; seg <= lastSegment; seg++) {
+    extendPowerGraphSegmentBounds(row, seg, graphX, graphRight, graphY, graphBottom, minX, maxX, minY, maxY);
   }
 
-  const int redrawMarginX = 10;
-  const int redrawMarginTop = 8;
-  const int redrawMarginBottom = 8;
-  int regionX = max(0, minX - redrawMarginX);
-  int regionY = max(0, minY - redrawMarginTop);
-  int regionRight = min(DISPLAY_WIDTH - 1, maxX + redrawMarginX);
-  int regionBottom = min(graphBottom + 6, maxY + redrawMarginBottom);
+  const int strokePadding = 2;
+  const int redrawPadding = 3;
+  const int markerRadius = 5;
 
-  for (int x = regionX; x <= regionRight; x++) {
-    tft.drawFastVLine(x, regionY, regionBottom - regionY + 1, getPowerGraphGradientColor(x));
+  minX -= strokePadding;
+  maxX += strokePadding;
+  minY -= strokePadding;
+  maxY += strokePadding;
+
+  if (selectedIndex >= firstSegment && selectedIndex <= lastSegment + 1) {
+    int selectedX = map(selectedIndex, 0, 9, graphX, graphRight);
+    int selectedY = getPowerGraphPointY(row, selectedIndex, graphY, graphBottom);
+    minX = min(minX, selectedX - markerRadius);
+    maxX = max(maxX, selectedX + markerRadius);
+    minY = min(minY, selectedY - markerRadius);
+    maxY = max(maxY, selectedY + markerRadius);
+  }
+
+  int regionX = constrain(minX - redrawPadding, graphX, graphRight);
+  int regionY = constrain(minY - redrawPadding, graphY, graphBottom);
+  int regionRight = constrain(maxX + redrawPadding, graphX, graphRight);
+  int regionBottom = constrain(maxY + redrawPadding, graphY, graphBottom);
+
+  if (regionRight < regionX || regionBottom < regionY) {
+    return;
+  }
+
+  // Do not clear plot border pixels; clear inside only.
+  int innerX0 = max(regionX, graphX + 1);
+  int innerY0 = max(regionY, graphY + 1);
+  int innerX1 = min(regionRight, graphRight - 1);
+  int innerY1 = min(regionBottom, graphBottom - 1);
+
+  if (innerX1 >= innerX0 && innerY1 >= innerY0) {
+    for (int x = innerX0; x <= innerX1; x++) {
+      tft.drawFastVLine(x, innerY0, innerY1 - innerY0 + 1, getPowerGraphGradientColor(x));
+    }
+  }
+
+  // Small outside cleanup around border (without touching border), limited so labels are safe.
+  const int outsideMargin = 3;
+  int outBottom = min(graphBottom + outsideMargin, graphBottom + 4);
+
+  int outLeftX0 = max(0, graphX - outsideMargin);
+  int outLeftX1 = graphX - 1;
+  int outRightX0 = graphRight + 1;
+  int outRightX1 = min(DISPLAY_WIDTH - 1, graphRight + outsideMargin);
+  int outTopY0 = max(0, graphY - outsideMargin);
+  int outTopY1 = graphY - 1;
+  int outBottomY0 = graphBottom + 1;
+  int outBottomY1 = min(DISPLAY_HEIGHT - 1, outBottom);
+
+  int bandY0 = max(regionY, graphY + 1);
+  int bandY1 = min(regionBottom, graphBottom - 1);
+  if (bandY1 >= bandY0) {
+    for (int x = outLeftX0; x <= outLeftX1; x++) {
+      tft.drawFastVLine(x, bandY0, bandY1 - bandY0 + 1, getPowerGraphGradientColor(x));
+    }
+    for (int x = outRightX0; x <= outRightX1; x++) {
+      tft.drawFastVLine(x, bandY0, bandY1 - bandY0 + 1, getPowerGraphGradientColor(x));
+    }
+  }
+
+  int bandX0 = max(regionX, graphX + 1);
+  int bandX1 = min(regionRight, graphRight - 1);
+  if (bandX1 >= bandX0) {
+    for (int x = bandX0; x <= bandX1; x++) {
+      if (outTopY1 >= outTopY0) {
+        tft.drawFastVLine(x, outTopY0, outTopY1 - outTopY0 + 1, getPowerGraphGradientColor(x));
+      }
+      if (outBottomY1 >= outBottomY0) {
+        tft.drawFastVLine(x, outBottomY0, outBottomY1 - outBottomY0 + 1, getPowerGraphGradientColor(x));
+      }
+    }
   }
 
   uint16_t gridColor = tft.color565(90, 90, 95);
-  uint16_t axisColor = tft.color565(210, 210, 210);
 
-  for (int i = 0; i <= 10; i++) {
-    int x = graphX + (graphW * i) / 10;
-    if (x >= regionX && x <= regionRight) {
-      int y0 = max(graphY, regionY);
-      int y1 = min(graphBottom, regionBottom);
-      if (y1 >= y0) {
-        tft.drawFastVLine(x, y0, y1 - y0 + 1, gridColor);
+  if (innerX1 >= innerX0 && innerY1 >= innerY0) {
+    for (int i = 0; i <= 10; i++) {
+      int x = graphX + (graphW * i) / 10;
+      if (x >= innerX0 && x <= innerX1) {
+        tft.drawFastVLine(x, innerY0, innerY1 - innerY0 + 1, gridColor);
+      }
+    }
+
+    for (int i = 0; i <= 10; i++) {
+      int y = graphY + (graphH * i) / 10;
+      if (y >= innerY0 && y <= innerY1) {
+        tft.drawFastHLine(innerX0, y, innerX1 - innerX0 + 1, gridColor);
       }
     }
   }
 
-  for (int i = 0; i <= 10; i++) {
-    int y = graphY + (graphH * i) / 10;
-    if (y >= regionY && y <= regionBottom) {
-      int x0 = max(graphX, regionX);
-      int x1 = min(graphRight, regionRight);
-      if (x1 >= x0) {
-        tft.drawFastHLine(x0, y, x1 - x0 + 1, gridColor);
-      }
-    }
-  }
-
-  if (graphX >= regionX && graphX <= regionRight) {
-    int y0 = max(graphY, regionY);
-    int y1 = min(graphBottom, regionBottom);
-    if (y1 >= y0) { tft.drawFastVLine(graphX, y0, y1 - y0 + 1, axisColor); }
-  }
-  if (graphRight >= regionX && graphRight <= regionRight) {
-    int y0 = max(graphY, regionY);
-    int y1 = min(graphBottom, regionBottom);
-    if (y1 >= y0) { tft.drawFastVLine(graphRight, y0, y1 - y0 + 1, axisColor); }
-  }
-  if (graphY >= regionY && graphY <= regionBottom) {
-    int x0 = max(graphX, regionX);
-    int x1 = min(graphRight, regionRight);
-    if (x1 >= x0) { tft.drawFastHLine(x0, graphY, x1 - x0 + 1, axisColor); }
-  }
-  if (graphBottom >= regionY && graphBottom <= regionBottom) {
-    int x0 = max(graphX, regionX);
-    int x1 = min(graphRight, regionRight);
-    if (x1 >= x0) { tft.drawFastHLine(x0, graphBottom, x1 - x0 + 1, axisColor); }
-  }
-
-  int firstSegment = max(0, startPoint - 1);
-  int lastSegment = min(8, endPoint);
   drawPowerGraphSmoothCurveRange(row, firstSegment, lastSegment, graphX, graphRight, graphY, graphBottom, TFT_RED);
 
   if (selectedIndex >= 0 && selectedIndex <= 9) {
@@ -4863,11 +4966,14 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
     int selectedY = getPowerGraphPointY(row, selectedIndex, graphY, graphBottom);
     selectedX = constrain(selectedX, graphX, graphRight);
     selectedY = constrain(selectedY, graphY, graphBottom);
-    if (selectedX >= regionX - 6 && selectedX <= regionRight + 6 && selectedY >= regionY - 6 && selectedY <= regionBottom + 6) {
-      drawLargeCircle(selectedX, selectedY, TFT_YELLOW, 5);
+
+    if (selectedX >= regionX - markerRadius && selectedX <= regionRight + markerRadius
+      && selectedY >= regionY - markerRadius && selectedY <= regionBottom + markerRadius) {
+      drawLargeCircle(selectedX, selectedY, TFT_YELLOW, markerRadius);
     }
   }
 }
+
 
 void grafmoci() {
   if (!grafmocizrisan) {
