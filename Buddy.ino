@@ -4552,57 +4552,55 @@ void dolocimocssr() {
 }
 
 void grafmoci() {
-  if (!grafmocizrisan) {
-    grafmocizrisan = 1;
-    int x, y, x2, y2;
-    izrismreze();
-    tft.setTextColor(TFT_LIGHTGREY);
+  grafmocizrisan = 1;
+  int x, y, x2, y2;
+  izrismreze();
+  tft.setTextColor(TFT_LIGHTGREY);
 
-    unsigned char pristej;   // pristejemo k indeksu, da vemo da nastavljamo drug izhod, to je takrat ko spreminjamo naslednjo vrstico vplivnikov
-    unsigned char tipgrafa;  //tip grafa zgolj doloca ali je RH ali CO2 ipd, na podlagi tega določijo zaporedna števila oštevilčenj za navpične črte na grafu
+  unsigned char pristej;   // pristejemo k indeksu, da vemo da nastavljamo drug izhod, to je takrat ko spreminjamo naslednjo vrstico vplivnikov
+  unsigned char tipgrafa;  //tip grafa zgolj doloca ali je RH ali CO2 ipd, na podlagi tega določijo zaporedna števila oštevilčenj za navpične črte na grafu
 
-    if (napis[indup2][indup1] == "GRAF0") {
-      pristej = 0;
-      tipgrafa = 0;
-    }
-    if (napis[indup2][indup1] == "GRAF1") {
-      pristej = 5;
-      tipgrafa = 1;
-    }
-    if (napis[indup2][indup1] == "GRAF2") {
-      pristej = 10;
-      tipgrafa = 1;
-    }
-
-
-    for (int i = 0; i < 9; i++) {
-      x = map(merjenci[tipgrafa][i], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
-      y = map(linijamoci[indup2 + pristej][i], 0, 100, 115, 5);  //0-100 procentov
-      x2 = map(merjenci[tipgrafa][i + 1], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
-      y2 = map(linijamoci[indup2 + pristej][i + 1], 0, 100, 115, 5);  //0-100 procentov
-      tft.drawLine(x, y, x2, y2, TFT_RED);
-      if (izbirnik == i) { drawLargeCircle(x, y, TFT_YELLOW, 5); }
-      if (i == 8 && izbirnik == 9) { drawLargeCircle(x2, y2, TFT_YELLOW, 5); }
-      x = map(merjenci[tipgrafa][i], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
-      tft.setCursor(x, 120);
-      tft.print(merjenci[tipgrafa][i]);
-      if (i == 8) {
-        x = map(merjenci[tipgrafa][9], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
-        tft.print(merjenci[tipgrafa][9]);
-      }
-    }
-
-
-    for (int i = 0; i <= 90; i += 20) {
-      int y = map(i, 0, 100, 120, 12);
-      tft.setTextSize(1);
-      tft.setTextColor(TFT_WHITE);
-      tft.setCursor(2, y - 10);
-      tft.print(i);
-    }
-    tft.setCursor(2, 3);
-    tft.print("99%");
+  if (napis[indup2][indup1] == "GRAF0") {
+    pristej = 0;
+    tipgrafa = 0;
   }
+  if (napis[indup2][indup1] == "GRAF1") {
+    pristej = 5;
+    tipgrafa = 1;
+  }
+  if (napis[indup2][indup1] == "GRAF2") {
+    pristej = 10;
+    tipgrafa = 1;
+  }
+
+
+  for (int i = 0; i < 9; i++) {
+    x = map(merjenci[tipgrafa][i], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
+    y = map(linijamoci[indup2 + pristej][i], 0, 100, 115, 5);  //0-100 procentov
+    x2 = map(merjenci[tipgrafa][i + 1], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
+    y2 = map(linijamoci[indup2 + pristej][i + 1], 0, 100, 115, 5);  //0-100 procentov
+    tft.drawLine(x, y, x2, y2, TFT_RED);
+    if (izbirnik == i) { drawLargeCircle(x, y, TFT_YELLOW, 5); }
+    if (i == 8 && izbirnik == 9) { drawLargeCircle(x2, y2, TFT_YELLOW, 5); }
+    x = map(merjenci[tipgrafa][i], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
+    tft.setCursor(x, 120);
+    tft.print(merjenci[tipgrafa][i]);
+    if (i == 8) {
+      x = map(merjenci[tipgrafa][9], merjenci[tipgrafa][0], merjenci[tipgrafa][9], 16, 152);
+      tft.print(merjenci[tipgrafa][9]);
+    }
+  }
+
+
+  for (int i = 0; i <= 90; i += 20) {
+    int y = map(i, 0, 100, 120, 12);
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE);
+    tft.setCursor(2, y - 10);
+    tft.print(i);
+  }
+  tft.setCursor(2, 3);
+  tft.print("99%");
 }
 
 void ura() {
