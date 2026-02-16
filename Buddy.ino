@@ -2892,17 +2892,7 @@ void loop() {
     prikaziVlagazemlje();
   }
   dolocimocssr();
-  if (flaggrafmoci) {
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setCursor(30, 10);
-    tft.print("Temp:");
-    tft.print(temperatura);
-    tft.print("C ");
-    tft.setCursor(30, 20);
-    tft.print("Moc Vent:");
-    tft.print(procenti[0]);
-    tft.print("% ");
-  }
+  // Graph mode textual temp/power overlay removed on purpose.
 
   // Check soil moisture levels for all discovered sensors and send alerts if needed
   for (int i = 0; i < discovered_nodes && i < MAX_SOIL_SENSORS; i++) {
@@ -4668,7 +4658,7 @@ void drawPowerGraphBackground() {
     tft.setCursor(x - (tempC >= 10 ? 6 : 3), graphY + graphH + 9);
     tft.print(tempC);
   }
-  tft.setCursor(graphX + graphW - 4, graphY + graphH + 19);
+  tft.setCursor(graphX + graphW - 4, graphY + graphH + 9);
   tft.print("C");
 
   for (int power = 0; power <= 100; power += 10) {
@@ -4676,7 +4666,7 @@ void drawPowerGraphBackground() {
     tft.setCursor(2, y - 3);
     tft.print(power);
   }
-  tft.setCursor(2, graphY - 10);
+  tft.setCursor(26, graphY - 3);
   tft.print("%");
 }
 
@@ -4705,7 +4695,30 @@ void dolocimocssr() {
 
 void drawPowerGraphThickLine(int x1, int y1, int x2, int y2, uint16_t color) {
   tft.drawLine(x1, y1, x2, y2, color);
-  tft.drawLine(x1, y1 + 1, x2, y2 + 1, color);
+  tft.drawLine(x1, y1 - 1, x2, y2 - 1, color);
+}
+
+bool isPowerGraphTurningPoint(int row, int pointIndex) {
+  if (pointIndex <= 0 || pointIndex >= 9) {
+    return false;
+  }
+
+  int prev = linijamoci[row][pointIndex - 1];
+  int curr = linijamoci[row][pointIndex];
+  int next = linijamoci[row][pointIndex + 1];
+
+  int d1 = curr - prev;
+  int d2 = next - curr;
+
+  if ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) {
+    return true;
+  }
+
+  if (abs(d1 - d2) >= 18) {
+    return true;
+  }
+
+  return false;
 }
 
 int getPowerGraphPointY(int row, int pointIndex, int graphY, int graphBottom) {
@@ -4737,6 +4750,13 @@ void drawPowerGraphSmoothCurveRange(int row, int startSegment, int endSegment, i
     int y1 = getPowerGraphPointY(row, p1, graphY, graphBottom);
     int y2 = getPowerGraphPointY(row, p2, graphY, graphBottom);
     int y3 = getPowerGraphPointY(row, p3, graphY, graphBottom);
+
+    bool smoothSegment = isPowerGraphTurningPoint(row, p1) || isPowerGraphTurningPoint(row, p2);
+
+    if (!smoothSegment) {
+      drawPowerGraphThickLine(x1, y1, x2, y2, color);
+      continue;
+    }
 
     float prevX = (float)x1;
     float prevY = (float)y1;
@@ -4777,8 +4797,8 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
   const int graphBottom = graphY + graphH;
   const int row = indup2 + pristej;
 
-  int startPoint = max(0, pointIndex - 1);
-  int endPoint = min(9, pointIndex + 1);
+  int startPoint = max(0, pointIndex - 2);
+  int endPoint = min(9, pointIndex + 2);
 
   int minX = graphRight;
   int maxX = graphX;
@@ -4796,13 +4816,13 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
     maxY = max(maxY, py);
   }
 
-  const int redrawMarginX = 10;
-  const int redrawMarginTop = 8;
-  const int redrawMarginBottom = 8;
+  const int redrawMarginX = 14;
+  const int redrawMarginTop = 10;
+  const int redrawMarginBottom = 12;
   int regionX = max(0, minX - redrawMarginX);
   int regionY = max(0, minY - redrawMarginTop);
   int regionRight = min(DISPLAY_WIDTH - 1, maxX + redrawMarginX);
-  int regionBottom = min(graphBottom + 6, maxY + redrawMarginBottom);
+  int regionBottom = min(DISPLAY_HEIGHT - 1, maxY + redrawMarginBottom);
 
   for (int x = regionX; x <= regionRight; x++) {
     tft.drawFastVLine(x, regionY, regionBottom - regionY + 1, getPowerGraphGradientColor(x));
