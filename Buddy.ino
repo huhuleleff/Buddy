@@ -320,7 +320,7 @@ void meritev();
 void drawHorizontalMenu();
 void ura();
 void grafmoci();
-void drawLargeCircle();
+void drawLargeCircle(int x0, int y0, uint32_t color, int radius);
 void dolocimocssr();
 void zcross();
 void upravljajmoci();
@@ -559,6 +559,7 @@ bool powerGraphStaticDrawn;
 // Graph redraw scratch variables kept global to avoid scope-related build issues.
 int minX, maxX, minY, maxY;
 int firstSegment, lastSegment;
+const int markerRadius = 5;
 unsigned char linijamoci[15][10]= {
   { 10, 20, 30, 40, 60, 80, 90, 100, 100, 100 },
   {}, {}, {}, {},
@@ -4906,8 +4907,8 @@ void redrawPowerGraphPointArea(unsigned char pristej, int pointIndex, int select
     int selectedY = getPowerGraphPointY(row, selectedIndex, graphY, graphBottom);
     selectedX = constrain(selectedX, graphX, graphRight);
     selectedY = constrain(selectedY, graphY, graphBottom);
-    if (selectedX >= regionX - 5 && selectedX <= regionRight + 5) {
-      drawLargeCircle(selectedX, selectedY, TFT_YELLOW, 5);
+    if (selectedX >= regionX - markerRadius && selectedX <= regionRight + markerRadius) {
+      drawLargeCircle(selectedX, selectedY, TFT_YELLOW, markerRadius);
     }
   }
 }
@@ -4948,7 +4949,7 @@ void grafmoci() {
     int selectedY = getPowerGraphPointY(indup2 + pristej, izbirnik, graphY, graphBottom);
     selectedX = constrain(selectedX, graphX, graphRight);
     selectedY = constrain(selectedY, graphY, graphBottom);
-    drawLargeCircle(selectedX, selectedY, TFT_YELLOW, 5);
+    drawLargeCircle(selectedX, selectedY, TFT_YELLOW, markerRadius);
   }
 }
 
